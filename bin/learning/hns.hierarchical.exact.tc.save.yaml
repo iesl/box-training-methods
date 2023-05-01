@@ -1,4 +1,4 @@
-name: hns_random_grid_search.tc.save_model
+name: hns.hierarchical.sampled.tc.save
 program: scripts/box-training-methods
 command:
   - ${env}
@@ -14,12 +14,13 @@ command:
   - --box_volume_temp=1.0
   - --log_interval=0.2
   - --patience=11
-  - --log_batch_size=10
+  - --log_batch_size=9
   - --log_eval_batch_size=17
   - --epochs=25
   - --dim=128
   - --negative_ratio=4
-  - --negative_sampler=random
+  - --negative_sampler=hierarchical
+  - --hierarchical_negative_sampling_strategy=exact
   - --negative_weight=0.9
   - --learning_rate=0.2
   - --wandb
