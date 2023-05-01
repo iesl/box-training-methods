@@ -1,4 +1,4 @@
-name: hns.hierarchical.sampled.tc.save
+name: hns.hierarchical.exact.tc.save
 program: scripts/box-training-methods
 command:
   - ${env}
