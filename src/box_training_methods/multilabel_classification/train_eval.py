@@ -195,7 +195,7 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
         )
     elif config["negative_sampler"] == "hierarchical":
         negative_sampler = HierarchicalNegativeEdges(
-            edges=taxonomy_edges,
+            edges=mesh_edges,
             negative_ratio=config["negative_ratio"],
             sampling_strategy=config["hierarchical_negative_sampling_strategy"],
             # cache_dir=config["data_path"] + ".hns",
@@ -210,7 +210,7 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
     # 2. instance-labels
     bioasq_dataset = BioASQInstanceLabelsDataset(
         file_path=bioasq_path,
-        parent_child_mapping_path=mesh_parent_child_path
+        parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path
     )
     

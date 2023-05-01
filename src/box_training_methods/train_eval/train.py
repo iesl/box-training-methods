@@ -129,7 +129,7 @@ def setup(**config):
 
     if config["task"] == "graph_modeling":
         from box_training_methods.graph_modeling import train_eval as task_train_eval
-    elif config["task"] == "multilabel_classification":
+    elif config["task"] == "multilabel_classification" or config["task"] == "bioasq":
         from box_training_methods.multilabel_classification import train_eval as task_train_eval
 
     device = cuda_if_available(use_cuda=config["cuda"])
