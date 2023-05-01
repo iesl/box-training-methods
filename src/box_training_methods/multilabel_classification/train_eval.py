@@ -185,6 +185,7 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
     label_set = label_encoder.classes_
     num_labels = len(label_set)
 
+    breakpoint()
     if config["negative_sampler"] == "random":
         negative_sampler = RandomNegativeEdges(
             num_nodes=num_labels,
