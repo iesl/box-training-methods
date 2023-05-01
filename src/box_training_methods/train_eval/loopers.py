@@ -83,9 +83,9 @@ class GraphModelingTrainLooper:
 
                     # save model at epoch to wandb.run.dir (e.g. /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/wandb/run-20230403_234846-86c2gllp/files/)
                     self.save_model.filename = f'learned_model.epoch-{epoch}.pt'
-                    self.save_model.save_to_disk(_=None)
+                    self.save_model.save_to_disk(None)
                     for eval_looper in self.eval_loopers:
-                        eval_looper.loop(epoch=epoch)
+                        eval_looper.loop(epoch=epoch, save_dir=self.save_model.run_dir)
 
                     # 2D TBOX VISUALIZATION INFO
                     if isinstance(self.model, TBox):
@@ -111,7 +111,7 @@ class GraphModelingTrainLooper:
             metrics = []
             predictions_coo = []
             for eval_looper in self.eval_loopers:
-                metric, prediction_coo = eval_looper.loop()
+                metric, prediction_coo = eval_looper.loop(epoch='final', save_dir=self.save_model.run_dir)
                 metrics.append(metric)
                 predictions_coo.append(prediction_coo)
             return metrics, predictions_coo
@@ -231,7 +231,8 @@ class MultilabelClassificationTrainLooper:
     box_model: Module
     instance_model: Module
     scorer: Module
-    instance_label_dl: DataLoader
+    instance_label_dl: DataLoader  # [(x1, l_{1_x1}), ..., (x1, l_{k_x1}), (x2, l_{1_x2}), ..., (x2, l_{k_x2})]  # used for positive examples
+    instance_label_set_dl: Dataloader   # [(x1, {l1, l2, ..., l_{k_x1}}), (x2, {l1, l2, ..., l_{k_x2}}), ...]    # used to produce negative set S for instance x
     label_label_dl: DataLoader
     opt: torch.optim.Optimizer
     label_label_loss_func: Callable
@@ -308,6 +309,8 @@ class MultilabelClassificationTrainLooper:
 
             # (batch_size, instance_feat_dim), (batch_size,)
             instance_batch_in, label_batch_in = batch
+
+            # TODO introduce label set batch in
 
             # TODO RandomNegativeEdges currently doesn't store adjacency matrix
             positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
@@ -430,7 +433,7 @@ class GraphModelingEvalLooper:
     output_dir: str = None
 
     @torch.no_grad()
-    def loop(self, epoch: Optional[int] = None) -> Dict[str, Any]:
+    def loop(self, epoch: Optional[int] = None, save_dir: Optional[str] = None) -> Dict[str, Any]:
         self.model.eval()
 
         logger.debug("Evaluating model predictions on full adjacency matrix")
@@ -492,13 +495,24 @@ class GraphModelingEvalLooper:
         predictions = (prediction_scores > metrics["threshold"]) * (
             ~np.eye(num_nodes, dtype=bool)
         )
-        # if self.output_dir is not None:
-        #     with open(os.path.join(self.output_dir, f'predictions.epoch-{epoch}.npy'), 'wb') as f:
-        #         np.save(f, coo_matrix(predictions), allow_pickle=True)
-        #     with open(os.path.join(self.output_dir, f'prediction_scores.epoch-{epoch}.npy'), 'wb') as f:
-        #         np.save(f, prediction_scores, allow_pickle=True)
-        #     with open(os.path.join(self.output_dir, f'metrics.epoch-{epoch}.json'), 'w') as f:
-        #         json.dump(metrics, f, indent=4, sort_keys=True)
+
+        if save_dir is not None:
+            
+            predictions_path = os.path.join(save_dir, f'predictions.epoch-{epoch}.npy')
+            with open(predictions_path, 'wb') as f:
+                np.save(f, coo_matrix(predictions), allow_pickle=True)
+            logger.info(f"Saving predictions to: {predictions_path}")
+
+            prediction_scores_path = os.path.join(save_dir, f'prediction_scores.epoch-{epoch}.npy')
+            with open(prediction_scores_path, 'wb') as f:
+                np.save(f, prediction_scores, allow_pickle=True)
+            logger.info(f"Saving prediction_scores to: {prediction_scores_path}")
+            
+            metrics_path = os.path.join(save_dir, f'metrics.epoch-{epoch}.json')
+            with open(metrics_path, 'w') as f:
+                json.dump(metrics, f, indent=4, sort_keys=True)
+            logger.info(f"Saving metrics to: {metrics_path}")
+        
         return metrics, coo_matrix(predictions)
 
 
