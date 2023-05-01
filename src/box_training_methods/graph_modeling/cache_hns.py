@@ -33,11 +33,12 @@ def traverse_and_cache_hns(graphs_dir, graph_types=['balanced_tree', 'nested_chi
                 if f.endswith(".npz"):
                     graph_npz_path = "/".join([root, f])
                     graph_hns_dir = graph_npz_path[:-len(".npz")] + ".hns"
-                    try:
-                        os.mkdir(graph_hns_dir)
-                        cache_hns(graph_npz_path, graph_hns_dir)
-                    except FileExistsError:
-                        pass
+                    print(graph_hns_dir)
+                    # try:
+                    #     os.mkdir(graph_hns_dir)
+                    cache_hns(graph_npz_path, graph_hns_dir)
+                    # except FileExistsError:
+                    #     pass
 
 
 if __name__ == '__main__':
