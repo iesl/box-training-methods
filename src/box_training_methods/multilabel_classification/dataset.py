@@ -1,7 +1,8 @@
-import math
+import math, random
 from pathlib import Path
 from time import time
 import pickle
+import json
 import ijson
 from itertools import cycle, islice
 from typing import *
@@ -170,7 +171,7 @@ class InstanceLabelsDataset(Dataset):
     def __getitem__(self, idxs: LongTensor) -> LongTensor:
         """
         :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
-        :return: batch_instances of shape (batch_size, instance_dim), batch_labels of shape (batch_size, num_labels)
+        :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
         """
         instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
         label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
@@ -228,6 +229,7 @@ class BioASQInstanceLabelsDataset(IterableDataset):
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
+    cycle: bool = True
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
@@ -241,7 +243,10 @@ class BioASQInstanceLabelsDataset(IterableDataset):
                 yield article
 
     def get_stream(self, file_path):
-        return cycle(self.parse_file(file_path))
+        if self.cycle:
+            return cycle(self.parse_file(file_path))
+        else:
+            return self.parse_file(file_path)
 
     def __iter__(self):
         return self.get_stream(self.file_path)
@@ -278,6 +283,76 @@ def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsDataset):
     breakpoint()
 
 
+def write_bioasq_pmids_to_file():
+    bioasq = BioASQInstanceLabelsDataset(cycle=False)
+    bioasq_iter = iter(bioasq)
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "+a") as f:
+        while (x := next(bioasq_iter, None)) is not None:
+            f.write(x['pmid'])
+            f.write('\n')
+
+
+def shuffle_and_split_bioasq_pmids():
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "r") as f:
+        pmids = [l.strip() for l in f.readlines() if l.strip()]
+    random.shuffle(pmids)
+    train, dev, test = pmids[:int(0.6 * len(pmids))], pmids[int(0.6 * len(pmids)): int(0.8 * len(pmids))], pmids[int(0.8 * len(pmids)):]
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "w") as f:
+        f.write("\n".join(train))
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.dev.shuffled.txt", "w") as f:
+        f.write("\n".join(dev))
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.test.shuffled.txt", "w") as f:
+        f.write("\n".join(test))
+
+
+def distribute_mesh_articles_among_splits_based_on_pmids():
+
+    bioasq = BioASQInstanceLabelsDataset(cycle=False)
+    bioasq_iter = iter(bioasq)
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "r") as f:
+        train_pmids = {l.strip() for l in f.readlines() if l.strip()}
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.dev.shuffled.txt", "r") as f:
+        dev_pmids = {l.strip() for l in f.readlines() if l.strip()}
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.test.shuffled.txt", "r") as f:
+        test_pmids = {l.strip() for l in f.readlines() if l.strip()}
+
+    train_articles = []
+    dev_articles = []
+    test_articles = []
+    while (x := next(bioasq_iter, None)) is not None:
+        if x['pmid'] in train_pmids:
+            train_articles.append(x)
+        elif x['pmid'] in dev_pmids:
+            dev_articles.append(x)
+        elif x['pmid'] in test_pmids:
+            test_articles.append(x)
+        else:
+            raise ValueError(f'pmid {pmid} not found!')
+
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/train.2020.txt", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in train_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write('\n')
+        f.write(json.dumps(train_articles[-1]))
+        f.write("]}")        
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/dev.2020.txt", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in dev_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write('\n')
+        f.write(json.dumps(dev_articles[-1]))
+        f.write("]}")
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.txt", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in test_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write('\n')
+        f.write(json.dumps(test_articles[-1]))
+        f.write("]}")
+
 if __name__ == "__main__":
-    bioasq = BioASQInstanceLabelsDataset()
-    mesh_leaf_label_stats(bioasq)
+    distribute_mesh_articles_among_splits_based_on_pmids()
