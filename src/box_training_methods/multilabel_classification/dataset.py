@@ -355,4 +355,6 @@ def distribute_mesh_articles_among_splits_based_on_pmids():
         f.write("]}")
 
 if __name__ == "__main__":
-    distribute_mesh_articles_among_splits_based_on_pmids()
+    bioasq_test = BioASQInstanceLabelsDataset(file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", cycle=False)
+    bioasq_test_iter = iter(bioasq_test)
+    breakpoint()
