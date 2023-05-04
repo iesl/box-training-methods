@@ -51,11 +51,15 @@ def mesh_cache_hns():
         negative_ratio=1,  # doesn't matter for caching
         sampling_strategy="exact",
     )
-    torch.save(HNE.negative_roots, "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/negative_roots.pt")
 
-    node_to_num_descendants = {n: len(nx.descendants(HNE.G, n)) for n in HNE.G.nodes}
-    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/node_to_num_descendants.pkl", 'wb') as f:
-        pickle.dump(node_to_num_descendants, f, protocol=pickle.HIGHEST_PROTOCOL)
+    HNE.cache_negatives(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives/")
+    HNE.cache_ancestors(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors/")
+
+    # torch.save(HNE.negative_roots, "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/negative_roots.pt")
+
+    # node_to_num_descendants = {n: len(nx.descendants(HNE.G, n)) for n in HNE.G.nodes}
+    # with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/node_to_num_descendants.pkl", 'wb') as f:
+    #     pickle.dump(node_to_num_descendants, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
