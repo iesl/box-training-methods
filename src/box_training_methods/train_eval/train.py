@@ -20,6 +20,7 @@ from pytorch_utils import TensorDataLoader, cuda_if_available
 from pytorch_utils.training import EarlyStopping, ModelCheckpoint
 from .loopers import GraphModelingTrainLooper, MultilabelClassificationTrainLooper,\
     GraphModelingEvalLooper, MultilabelClassificationEvalLooper
+from box_training_methods.multilabel_classification.dataset import collate_mesh_fn
 from box_training_methods import metric_logger
 
 
@@ -129,7 +130,7 @@ def setup(**config):
 
     if config["task"] == "graph_modeling":
         from box_training_methods.graph_modeling import train_eval as task_train_eval
-    elif config["task"] == "multilabel_classification" or config["task"] == "bioasq":
+    elif config["task"] in {"multilabel_classification", "bioasq"}:
         from box_training_methods.multilabel_classification import train_eval as task_train_eval
 
     device = cuda_if_available(use_cuda=config["cuda"])
@@ -148,7 +149,8 @@ def setup(**config):
         dev_dataloader = TensorDataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
-        taxonomy_dataset, train_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
+        taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
+        # TODO create dataloader instantiated with collate_mesh_fn
 
     if isinstance(config["log_interval"], float):
         config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
@@ -160,7 +162,7 @@ def setup(**config):
     # TODO remove num_nodes explicit arg from setup_model API
     if config["task"] == "graph_modeling":
         model, loss_func = task_train_eval.setup_model(train_dataset.num_nodes, device, **config)
-    elif config["task"] == "multilabel_classification":
+    elif config["task"] in {"multilabel_classification", "bioasq"}:
         box_model, instance_encoder, scorer, label_label_loss_func = \
             task_train_eval.setup_model(taxonomy_dataset.num_nodes, train_dataset.instance_dim, device, **config)
 
@@ -169,7 +171,7 @@ def setup(**config):
         opt = torch.optim.Adam(
             model.parameters(), lr=config["learning_rate"], weight_decay=0.0
         )
-    elif config["task"] == "multilabel_classification":
+    elif config["task"] in {"multilabel_classification", "bioasq"}:
         # TODO add more params to optimize
         opt = torch.optim.Adam(
             box_model.parameters(), lr=config["learning_rate"], weight_decay=0.0
@@ -190,7 +192,7 @@ def setup(**config):
                     output_dir=config["output_dir"],
                 )
             )
-        elif config["task"] == "multilabel_classification":
+        elif config["task"] in {"multilabel_classification", "bioasq"}:
             eval_loopers.extend([
                 MultilabelClassificationEvalLooper(
                     name="Validation",
@@ -218,7 +220,7 @@ def setup(**config):
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
         )
-    elif config["task"] == "multilabel_classification":
+    elif config["task"] in {"multilabel_classification", "bioasq"}:
         train_looper = MultilabelClassificationTrainLooper(
             name="Train",
             box_model=box_model,
@@ -235,7 +237,7 @@ def setup(**config):
 
     if config["task"] == "graph_modeling":
         models = (model,)
-    elif config["task"] == "multilabel_classification":
+    elif config["task"] in {"multilabel_classification", "bioasq"}:
         models = (box_model, instance_encoder, scorer)
 
     return models, train_looper
