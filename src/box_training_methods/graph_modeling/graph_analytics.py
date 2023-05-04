@@ -210,22 +210,40 @@ def generate_analytics_for_graphs_in_dir(graphs_root="/work/pi_mccallum_umass_ed
 
     all_stats = []
     for root, dirs, files in os.walk(graphs_root):
-        for f in files:
-            if f.endswith(".npz"):
+        print(dirs)
+        # for f in files:
+        #     print(f)
+            # if f.endswith(".npz"):
 
-                if 'kronecker_graph' in root or 'scale_free_network' in root:
-                    continue
+            #     if 'kronecker_graph' in root or 'scale_free_network' in root:
+            #         continue
 
-                graph_npz_path = "/".join([root, f])
-                # num_nodes_to_hns_roots(graph_npz_path, save_dir)
-                random_negatives_minus_hns_negatives(graph_npz_path, save_dir)
-                # stats = graph_analytics(graph_npz_path, save_dir)
-                # all_stats.append(stats)
+            #     graph_npz_path = "/".join([root, f])
+            #     # num_nodes_to_hns_roots(graph_npz_path, save_dir)
+            #     random_negatives_minus_hns_negatives(graph_npz_path, save_dir)
+            #     # stats = graph_analytics(graph_npz_path, save_dir)
+            #     # all_stats.append(stats)
 
     return all_stats
 
 
 if __name__ == '__main__':
+
+    ### NON-TC GRAPHS
+    #   'data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=False', 
+    #   'data/graphs13/balanced_tree/branching=5-log_num_nodes=13-transitive_closure=False', 
+    #   'data/graphs13/balanced_tree/branching=2-log_num_nodes=13-transitive_closure=False',
+    #   'data/graphs13/balanced_tree/branching=3-log_num_nodes=13-transitive_closure=False',
+    #   'data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=False',
+    #   'data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=False',
+    #   'data/graphs13/nested_chinese_restaurant_process/alpha=10-log_num_nodes=13-transitive_closure=False',
+    #   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=False',
+    #   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=False',
+    #   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=False',
+    #   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=False',
+    #   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=False',
+    #   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=False'
+
 
     # graph_analytics("/Users/brozonoyer/Desktop/IESL/box-training-methods/data/graphs/kronecker_graph/a=1.0-b=0.6-c=0.5-d=0.2-log_num_nodes=12-transitive_closure=False/1619702443.npz",
     #                 save_dir="/Users/brozonoyer/Desktop/IESL/box-training-methods/figs/graph_analytics/")
@@ -238,19 +256,3 @@ if __name__ == '__main__':
     all_stats = generate_analytics_for_graphs_in_dir(graphs_root="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graphs13/",
                                                      save_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graph_analytics/hns_histograms.v2/")
     # all_stats_to_csv(all_stats, "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graph_analytics/graphs13_stats.csv")
-
-
-
-#   'data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=False', 
-#   'data/graphs13/balanced_tree/branching=5-log_num_nodes=13-transitive_closure=False', 
-#   'data/graphs13/balanced_tree/branching=2-log_num_nodes=13-transitive_closure=False',
-#   'data/graphs13/balanced_tree/branching=3-log_num_nodes=13-transitive_closure=False',
-#   'data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=False',
-#   'data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=False',
-#   'data/graphs13/nested_chinese_restaurant_process/alpha=10-log_num_nodes=13-transitive_closure=False',
-#   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=False',
-#   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=False',
-#   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=False',
-#   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=False',
-#   'data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=False',
-#   'data/graphs13/price/c=0.1-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=False'

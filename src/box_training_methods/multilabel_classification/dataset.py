@@ -1,7 +1,8 @@
-import math
+import math, random
 from pathlib import Path
 from time import time
 import pickle
+import json
 import ijson
 from itertools import cycle, islice
 from typing import *
@@ -170,7 +171,7 @@ class InstanceLabelsDataset(Dataset):
     def __getitem__(self, idxs: LongTensor) -> LongTensor:
         """
         :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
-        :return: batch_instances of shape (batch_size, instance_dim), batch_labels of shape (batch_size, num_labels)
+        :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
         """
         instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
         label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
@@ -211,43 +212,105 @@ class InstanceLabelsDataset(Dataset):
         return self
 
 
+class MESHNegativeSampler(object):
+    def __call__(self, labels: List[str]) -> List[str]:
+        """Samples num_negatives labels from the mesh vocab that are not in labels"""
+        # FIXME
+        return []
+
+
 def collate_mesh_fn(batch, tokenizer):
-
-    inputs = tokenizer([x['journal'] + f' {tokenizer.sep_token} ' + 
-                        x['title'] + f' {tokenizer.sep_token} ' + 
-                        x['abstractText'] for x in batch], 
-                        return_tensors="pt", padding=True)
-    labels = [[m for m in x['meshMajor']] for x in batch]
-
-    return inputs, labels
+    inputs = tokenizer(
+        [
+            x["journal"]
+            + f" {tokenizer.sep_token} "
+            + x["title"]
+            + f" {tokenizer.sep_token} "
+            + x["abstractText"]
+            for x in batch
+        ],
+        return_tensors="pt",
+        padding=True,
+    )
+    # TODO: Handle variable number of positives and negatives using padding
+    positives = torch.tensor(
+        [[m for m in x["positives"]] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_positives)
+    negatives = torch.tensor(
+        [[m for m in x["negatives"]] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_negatives)
+    extra_positive_edges = torch.tensor(
+        [x["extra_positive_edges"] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_extra_positive_edges)
+    return inputs, positives, negatives
 
 
 @attr.s(auto_attribs=True)
-class BioASQInstanceLabelsDataset(IterableDataset):
-    
+class BioASQInstanceLabelsIterDataset(IterableDataset):
+    """Dataset for BioASQ data with MESH labels
+    Each data sample is a json object with the following keys:
+    - journal: str
+    - title: str
+    - abstractText: str
+    - meshMajor: List[str]
+    where meshMajor is a list of MESH labels.
+    """
+
+    mesh_negative_sampler: MESHNegativeSampler
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
+    cycle: bool = True
+    # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
+    # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
-        self.edges, self.le = edges_from_hierarchy_edge_list(edge_file=self.parent_child_mapping_path, mesh=True)
-        self.name_id, self.id_name = name_id_mapping_from_file(name_id_file=self.name_id_mapping_path)
-        self.G = nx.DiGraph(self.edges[:, [1, 0]].tolist())  # reverse to parent-child format for DiGraph
+        self.edges, self.le = edges_from_hierarchy_edge_list(
+            edge_file=self.parent_child_mapping_path, mesh=True
+        )
+        self.name_id, self.id_name = name_id_mapping_from_file(
+            name_id_file=self.name_id_mapping_path
+        )
+        self.G = nx.DiGraph(
+            self.edges[:, [1, 0]].tolist()
+        )  # reverse to parent-child format for DiGraph
+
+    def label_to_id(self, labels: Iterable[str]) -> List[int]:
+        return [self.name_id[label] for label in labels]
+
+    def get_extra_positive_edges(
+        self, labels: Iterable[str]
+    ) -> Tuple[List[int], List[int]]:
+        """Uses the MESH hierarchy to find extra positive edges for the labels.
+        These are edges from positive children to positive ancestors.
+        """
+        # FIXME
+        return []
 
     def parse_file(self, file_path):
-        with open(file_path, encoding='windows-1252', mode='r') as f:
-            for article in ijson.items(f, 'articles.item'):
+        with open(file_path, encoding="windows-1252", mode="r") as f:
+            for article in ijson.items(f, "articles.item"):
+                article["positives"] = self.label_to_id(article["meshMajor"])
+                article["extra_positive_edges"] = self.get_extra_positive_edges(
+                    article["meshMajor"]
+                )
+                article["negatives"] = self.label_to_id(
+                    self.mesh_negative_sampler(article["meshMajor"])
+                )
                 yield article
 
     def get_stream(self, file_path):
-        return cycle(self.parse_file(file_path))
+        if self.cycle:
+            return cycle(self.parse_file(file_path))
+        else:
+            return self.parse_file(file_path)
 
     def __iter__(self):
         return self.get_stream(self.file_path)
 
 
-def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsDataset):
+def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsIterDataset):
     bioasq_iter = iter(bioasq)
     leaves = {n for n in bioasq.G.nodes if bioasq.G.out_degree(n) == 0}
     leaf_label_counts = []
@@ -278,6 +341,79 @@ def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsDataset):
     breakpoint()
 
 
+def write_bioasq_pmids_to_file():
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq_iter = iter(bioasq)
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "+a") as f:
+        while (x := next(bioasq_iter, None)) is not None:
+            f.write(x['pmid'])
+            f.write('\n')
+
+
+def shuffle_and_split_bioasq_pmids():
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "r") as f:
+        pmids = [l.strip() for l in f.readlines() if l.strip()]
+    random.shuffle(pmids)
+    train, dev, test = pmids[:int(0.6 * len(pmids))], pmids[int(0.6 * len(pmids)): int(0.8 * len(pmids))], pmids[int(0.8 * len(pmids)):]
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "w") as f:
+        f.write("\n".join(train))
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.dev.shuffled.txt", "w") as f:
+        f.write("\n".join(dev))
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.test.shuffled.txt", "w") as f:
+        f.write("\n".join(test))
+
+
+def distribute_mesh_articles_among_splits_based_on_pmids():
+
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq_iter = iter(bioasq)
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "r") as f:
+        train_pmids = {l.strip() for l in f.readlines() if l.strip()}
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.dev.shuffled.txt", "r") as f:
+        dev_pmids = {l.strip() for l in f.readlines() if l.strip()}
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.test.shuffled.txt", "r") as f:
+        test_pmids = {l.strip() for l in f.readlines() if l.strip()}
+
+    train_articles = []
+    dev_articles = []
+    test_articles = []
+    while (x := next(bioasq_iter, None)) is not None:
+        if x['pmid'] in train_pmids:
+            train_articles.append(x)
+        elif x['pmid'] in dev_pmids:
+            dev_articles.append(x)
+        elif x['pmid'] in test_pmids:
+            test_articles.append(x)
+        else:
+            raise ValueError(f'pmid {pmid} not found!')
+
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/train.2020.json", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in train_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write(',\n')
+        f.write(json.dumps(train_articles[-1]))
+        f.write("]}")        
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/dev.2020.json", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in dev_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write(',\n')
+        f.write(json.dumps(dev_articles[-1]))
+        f.write("]}")
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", "a+") as f:
+        f.write('{"articles":[')
+        f.write('\n')
+        for article in test_articles[:-1]:
+            f.write(json.dumps(article))
+            f.write(',\n')
+        f.write(json.dumps(test_articles[-1]))
+        f.write("]}")
+
+
 if __name__ == "__main__":
-    bioasq = BioASQInstanceLabelsDataset()
-    mesh_leaf_label_stats(bioasq)
+    bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", cycle=False)
+    bioasq_test_iter = iter(bioasq_test)
+    print(next(bioasq_test_iter))

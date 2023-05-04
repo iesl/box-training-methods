@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, WeightedRandomSampler
 from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence
 
 import networkx as nx
-from scipy.sparse._csr import csr_matrix
+#from scipy.sparse._csr import csr_matrix
 
 from ..enums import PermutationOption
 
@@ -431,7 +431,7 @@ class HierarchicalNegativeEdges:
         A = nx.adjacency_matrix(G, nodelist=sorted(list(G.nodes)))
 
         # TODO calculate max depth (max # edges) via dfs
-        self.max_depth = 25
+        self.max_depth = 100
         A_ = A.copy()
         for _ in range(self.max_depth):
             A_ += A_ @ A
@@ -574,6 +574,20 @@ class HierarchicalNegativeEdges:
         self.edges = self.edges.to(device)
         self.negative_roots = self.negative_roots.to(device)
         return self
+
+    def cache_negatives(self, cache_dir: Optional[str] = None):
+
+        for node in range(self.A_.shape[0]):
+            negatives_for_node = set(self.precompute_negatives_for_node(node))        
+            with open(os.path.join(cache_dir, f'{node}-negatives.pkl'), 'wb') as f:
+                pickle.dump(negatives_for_node, f)
+
+    def cache_ancestors(self, cache_dir: Optional[str] = None):
+        
+        for node in range(self.A_.shape[0]):
+            ancestors_for_node = set(self.A_[:, node].nonzero()[0])
+            with open(os.path.join(cache_dir, f'{node}-ancestors.pkl'), 'wb') as f:
+                pickle.dump(ancestors_for_node, f)
 
 
 @attr.s(auto_attribs=True)
