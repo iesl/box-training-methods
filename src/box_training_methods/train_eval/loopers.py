@@ -232,7 +232,6 @@ class MultilabelClassificationTrainLooper:
     instance_model: Module
     scorer: Module
     instance_label_dl: DataLoader  # [(x1, l_{1_x1}), ..., (x1, l_{k_x1}), (x2, l_{1_x2}), ..., (x2, l_{k_x2})]  # used for positive examples
-    instance_label_set_dl: Dataloader   # [(x1, {l1, l2, ..., l_{k_x1}}), (x2, {l1, l2, ..., l_{k_x2}}), ...]    # used to produce negative set S for instance x
     label_label_dl: DataLoader
     opt: torch.optim.Optimizer
     label_label_loss_func: Callable
@@ -309,6 +308,8 @@ class MultilabelClassificationTrainLooper:
 
             # (batch_size, instance_feat_dim), (batch_size,)
             instance_batch_in, label_batch_in = batch
+
+            breakpoint()
 
             # TODO introduce label set batch in
 

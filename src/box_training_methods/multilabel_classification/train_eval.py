@@ -185,7 +185,6 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
     label_set = label_encoder.classes_
     num_labels = len(label_set)
 
-    breakpoint()
     if config["negative_sampler"] == "random":
         negative_sampler = RandomNegativeEdges(
             num_nodes=num_labels,
@@ -199,7 +198,7 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
             edges=mesh_edges,
             negative_ratio=config["negative_ratio"],
             sampling_strategy=config["hierarchical_negative_sampling_strategy"],
-            # cache_dir=config["data_path"] + ".hns",
+            cache_dir=os.path.join(str(bioasq_path.parent), "hns"),
         )
     else:
         raise NotImplementedError
