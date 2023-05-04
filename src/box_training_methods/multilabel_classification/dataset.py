@@ -329,28 +329,28 @@ def distribute_mesh_articles_among_splits_based_on_pmids():
         else:
             raise ValueError(f'pmid {pmid} not found!')
 
-    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/train.2020.txt", "a+") as f:
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/train.2020.json", "a+") as f:
         f.write('{"articles":[')
         f.write('\n')
         for article in train_articles[:-1]:
             f.write(json.dumps(article))
-            f.write('\n')
+            f.write(',\n')
         f.write(json.dumps(train_articles[-1]))
         f.write("]}")        
-    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/dev.2020.txt", "a+") as f:
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/dev.2020.json", "a+") as f:
         f.write('{"articles":[')
         f.write('\n')
         for article in dev_articles[:-1]:
             f.write(json.dumps(article))
-            f.write('\n')
+            f.write(',\n')
         f.write(json.dumps(dev_articles[-1]))
         f.write("]}")
-    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.txt", "a+") as f:
+    with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", "a+") as f:
         f.write('{"articles":[')
         f.write('\n')
         for article in test_articles[:-1]:
             f.write(json.dumps(article))
-            f.write('\n')
+            f.write(',\n')
         f.write(json.dumps(test_articles[-1]))
         f.write("]}")
 
