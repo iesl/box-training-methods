@@ -250,12 +250,16 @@ def collate_mesh_fn(batch, tokenizer):
         return_tensors="pt",
         padding=True,
     )
+    # TODO: Handle variable number of positives and negatives using padding
     positives = torch.tensor(
-        [[m for m in x["meshMajorIds"]] for x in batch], dtype=torch.long
-    )
+        [[m for m in x["positives"]] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_positives)
     negatives = torch.tensor(
-        [[m for m in x["meshNegativeIds"]] for x in batch], dtype=torch.long
-    )
+        [[m for m in x["negatives"]] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_negatives)
+    extra_positive_edges = torch.tensor(
+        [x["extra_positive_edges"] for x in batch], dtype=torch.long
+    )  # shape = (batch_size, num_extra_positive_edges)
     return inputs, positives, negatives
 
 
@@ -294,7 +298,9 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     def label_to_id(self, labels: Iterable[str]) -> List[int]:
         return [self.name_id[label] for label in labels]
 
-    def get_extra_positive_edges(self, labels: Iterable[str]) -> List[int]:
+    def get_extra_positive_edges(
+        self, labels: Iterable[str]
+    ) -> Tuple[List[int], List[int]]:
         """Uses the MESH hierarchy to find extra positive edges for the labels.
         These are edges from positive childre to positive ancestors.
         """
@@ -303,7 +309,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     def parse_file(self, file_path):
         with open(file_path, encoding="windows-1252", mode="r") as f:
             for article in ijson.items(f, "articles.item"):
-                article["meshMajorId"] = self.label_to_id(article["meshMajor"])
+                article["positives"] = self.label_to_id(article["meshMajor"])
                 article["extra_positive_edges"] = self.get_extra_positive_edges(
                     article["meshMajor"]
                 )
