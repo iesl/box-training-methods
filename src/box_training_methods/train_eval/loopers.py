@@ -304,22 +304,14 @@ class MultilabelClassificationTrainLooper:
         for batch in self.dl:
 
             inputs, positives, negatives = batch
-            print(inputs)
-            print(positives)
-            print(negatives)
 
-            # # TODO introduce label set batch in
+            input_encs = self.instance_model(inputs)
+            breakpoint()
 
             # # TODO RandomNegativeEdges currently doesn't store adjacency matrix
             # positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
             # negative_label_label_idxs = self.label_label_dl.dataset.negative_sampler(positive_label_label_idxs)
             # label_label_batch_in = torch.cat([positive_label_label_idxs.unsqueeze(1), negative_label_label_idxs], dim=1)
-
-            # # try:
-            # #     label_label_batch_in = next(label_label_iter)
-            # # except StopIteration:
-            # #     label_label_iter = iter(self.label_label_dl)
-            # #     label_label_batch_in = next(label_label_iter)
 
             # self.opt.zero_grad()
 

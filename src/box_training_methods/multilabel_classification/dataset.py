@@ -220,6 +220,7 @@ class CollateMeshFn(object):
         self.PAD = self.tokenizer.pad_token_id
     
     def __call__(self, batch):
+        # TODO add CLS token at beginning or end?
         inputs = self.tokenizer(
             [
                 x["journal"]
@@ -232,7 +233,6 @@ class CollateMeshFn(object):
             return_tensors="pt",
             padding=True,  # pad_token_id = 1
         )
-        # TODO: Handle variable number of positives and negatives using padding
 
         positives = [[m for m in x["positives"]] for x in batch]
         max_pos_len = max(map(len, positives))
@@ -287,12 +287,34 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
         anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
-        return [self.name_id[label] if label not in anomalies.keys() else anomalies[label] for label in labels]
+        # 'Pyruvate Dehydrogenase (Acetyl-Transferring) Kinase'
+        ids = []
+        for label in labels:
+            try:
+                ids.append(self.name_id[label])
+            except KeyError:
+                logger.warning(f'Label {label} not in self.name_id!')
+                if label in anomalies:
+                    ids.append(anomalies[label])
+                else:
+                    continue
+        return ids
 
     def id_to_label(self, ids: Iterable[str]) -> List[str]:
         anomalies = {'anatomy_category': 'Anatomy',
                      'persons_category': 'Persons'}
-        return [self.id_name[id] if id not in anomalies.keys() else anomalies[id] for id in ids]
+        # Clostridium difficile
+        labels = []
+        for id in ids:
+            try:
+                labels.append(self.id_name[id])
+            except KeyError:
+                logger.warning(f'Id {id} not in self.id_name!')
+                if id in anomalies:
+                    labels.append(anomalies[id])
+                else:
+                    continue
+        return labels
 
     def get_extra_positive_edges(
         self, labels: Iterable[str]
