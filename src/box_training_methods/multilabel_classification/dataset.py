@@ -1,3 +1,4 @@
+import os
 import math, random
 from pathlib import Path
 from time import time
@@ -212,30 +213,43 @@ class InstanceLabelsDataset(Dataset):
         return self
 
 
-def collate_mesh_fn(batch, tokenizer):
-    inputs = tokenizer(
-        [
-            x["journal"]
-            + f" {tokenizer.sep_token} "
-            + x["title"]
-            + f" {tokenizer.sep_token} "
-            + x["abstractText"]
-            for x in batch
-        ],
-        return_tensors="pt",
-        padding=True,
-    )
-    # TODO: Handle variable number of positives and negatives using padding
-    positives = torch.tensor(
-        [[m for m in x["positives"]] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_positives)
-    negatives = torch.tensor(
-        [[m for m in x["negatives"]] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_negatives)
-    extra_positive_edges = torch.tensor(
-        [x["extra_positive_edges"] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_extra_positive_edges)
-    return inputs, positives, negatives
+class CollateMeshFn(object):
+
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
+        self.PAD = self.tokenizer.pad_token_id
+    
+    def __call__(self, batch):
+        inputs = self.tokenizer(
+            [
+                x["journal"]
+                + f" {self.tokenizer.sep_token} "
+                + x["title"]
+                + f" {self.tokenizer.sep_token} "
+                + x["abstractText"]
+                for x in batch
+            ],
+            return_tensors="pt",
+            padding=True,  # pad_token_id = 1
+        )
+        # TODO: Handle variable number of positives and negatives using padding
+
+        positives = [[m for m in x["positives"]] for x in batch]
+        max_pos_len = max(map(len, positives))
+        positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
+        positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+
+        negatives = [[m for m in x["negatives"]] for x in batch]
+        max_neg_len = max(map(len, negatives))
+        negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
+        negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+        
+        xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+        max_xpos_len = max(map(len, xpositives))
+        xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+        xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+
+        return inputs, positives, negatives
 
 
 @attr.s(auto_attribs=True)
@@ -252,12 +266,15 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
+    ancestors_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors"
+    negatives_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives"
     cycle: bool = True
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
+        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer)
         self.edges, self.le = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path, mesh=True
         )
@@ -269,7 +286,8 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         )  # reverse to parent-child format for DiGraph
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
-        return [self.name_id[label] for label in labels]
+        anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
+        return [self.name_id[label] if label not in anomalies.keys() else anomalies[label] for label in labels]
 
     def id_to_label(self, ids: Iterable[str]) -> List[str]:
         anomalies = {'anatomy_category': 'Anatomy',
@@ -288,6 +306,9 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
         return ancestor_encs
 
+    def read_set(self, pickled_set_fpath: str) -> Set:
+        return pickle.load(open(pickled_set_fpath, "rb"))
+
     def get_negatives(self, positives: np.ndarray) -> np.ndarray:
             """Samples num_negatives labels from the mesh vocab that are not in labels"""
             # FIXME
@@ -295,9 +316,10 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             all_negatives = set()
             for p in positives:
                 # For each positive label, get the set of its ancestors
-                anc = self.read_set(self.ancestor_cache_path / f"{p}-ancestors.pkl").add(p)
+                anc = self.read_set(os.path.join(self.ancestors_cache_path, f"{p}-ancestors.pkl"))
+                anc.add(p)
                 all_positives = all_positives.union(anc)
-                negs = self.read_set(self.negatives_cache_path / f"{p}-negatives.pkl")
+                negs = self.read_set(os.path.join(self.negatives_cache_path, f"{p}-negatives.pkl"))
                 all_negatives = all_negatives.union(negs)
             final_negatives = all_negatives.difference(all_positives)
             return np.array(list(final_negatives))
