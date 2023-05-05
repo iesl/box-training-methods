@@ -212,13 +212,6 @@ class InstanceLabelsDataset(Dataset):
         return self
 
 
-class MESHNegativeSampler(object):
-    def __call__(self, labels: List[str]) -> List[str]:
-        """Samples num_negatives labels from the mesh vocab that are not in labels"""
-        # FIXME
-        return []
-
-
 def collate_mesh_fn(batch, tokenizer):
     inputs = tokenizer(
         [
@@ -256,7 +249,6 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     where meshMajor is a list of MESH labels.
     """
 
-    mesh_negative_sampler: MESHNegativeSampler
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
