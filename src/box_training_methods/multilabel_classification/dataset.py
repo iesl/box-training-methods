@@ -54,8 +54,8 @@ def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccal
 
 
 def name_id_mapping_from_file(name_id_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt") -> Dict:
-    name_id = pd.read_csv(name_id_file, sep="=", header=None)
-    name_id = dict(zip(name_id[0], name_id[1]))
+    with open(name_id_file, "r") as f:
+        name_id = {line.split("=")[0].strip(): line.split("=")[1].strip() for line in f}
     id_name = {i:n for n,i in name_id.items()}
     return name_id, id_name
 
@@ -276,8 +276,13 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             self.edges[:, [1, 0]].tolist()
         )  # reverse to parent-child format for DiGraph
 
-    def label_to_id(self, labels: Iterable[str]) -> List[int]:
+    def label_to_id(self, labels: Iterable[str]) -> List[str]:
         return [self.name_id[label] for label in labels]
+
+    def id_to_label(self, ids: Iterable[str]) -> List[str]:
+        anomalies = {'anatomy_category': 'Anatomy',
+                     'persons_category': 'Persons'}
+        return [self.id_name[id] if id not in anomalies.keys() else anomalies[id] for id in ids]
 
     def get_extra_positive_edges(
         self, labels: Iterable[str]
@@ -285,19 +290,35 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         """Uses the MESH hierarchy to find extra positive edges for the labels.
         These are edges from positive children to positive ancestors.
         """
-        # FIXME
-        return []
+        label_encs = self.le.transform(self.label_to_id(labels))
+        ancestor_encs = [nx.ancestors(self.G, l) for l in label_encs]
+        ancestor_encs = set().union(*ancestor_encs)
+        # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
+        breakpoint()
+        return ancestor_encs
+
+    def get_negatives(self, positives: np.ndarray) -> np.ndarray:
+            """Samples num_negatives labels from the mesh vocab that are not in labels"""
+            # FIXME
+            all_positives = set()
+            all_negatives = set()
+            for p in positives:
+                # For each positive label, get the set of its ancestors
+                anc = self.read_set(self.ancestor_cache_path / f"{p}-ancestors.pkl").add(p)
+                all_positives = all_positives.union(anc)
+                negs = self.read_set(self.negatives_cache_path / f"{p}-negatives.pkl")
+                all_negatives = all_negatives.union(negs)
+            final_negatives = all_negatives.difference(all_positives)
+            return np.array(list(final_negatives))
 
     def parse_file(self, file_path):
         with open(file_path, encoding="windows-1252", mode="r") as f:
             for article in ijson.items(f, "articles.item"):
-                article["positives"] = self.label_to_id(article["meshMajor"])
+                article["positives"] = self.le.transform(self.label_to_id(article["meshMajor"]))
                 article["extra_positive_edges"] = self.get_extra_positive_edges(
                     article["meshMajor"]
                 )
-                article["negatives"] = self.label_to_id(
-                    self.mesh_negative_sampler(article["meshMajor"])
-                )
+                article["negatives"] = self.get_negatives(article["positives"])
                 yield article
 
     def get_stream(self, file_path):
