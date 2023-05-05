@@ -9,7 +9,7 @@ import torch
 from torch.nn import Module
 from pytorch_utils import TensorDataLoader, cuda_if_available
 
-from .dataset import edges_from_hierarchy_edge_list, ARFFReader, InstanceLabelsDataset, BioASQInstanceLabelsDataset
+from .dataset import edges_from_hierarchy_edge_list, ARFFReader, InstanceLabelsDataset, BioASQInstanceLabelsIterDataset
 from box_training_methods.graph_modeling.dataset import RandomNegativeEdges, \
     HierarchicalNegativeEdges, GraphDataset
 
@@ -179,22 +179,17 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
     mesh_parent_child_path = Path(config["mesh_parent_child_mapping_path"])
     mesh_name_id_path = Path(config["mesh_name_id_mapping_path"])
 
-    mesh_negative_sampler = MESHNegativeSampler()  # TODO add args
-
     train_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
         file_path=bioasq_path / "train.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
     )
     validation_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
         file_path=bioasq_path / "val.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
         file_path=bioasq_path / "test.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,

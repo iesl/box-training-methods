@@ -149,11 +149,14 @@ def setup(**config):
         dev_dataloader = TensorDataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
-        taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
+        train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
         # TODO create dataloader instantiated with collate_mesh_fn
 
     if isinstance(config["log_interval"], float):
-        config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
+        if config["task"] != "bioasq":
+            config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
+        else:
+            config["log_interval"] = 10000
     logger.info(f"Log every {config['log_interval']:,} instances")
     logger.info(f"Stop after {config['patience']:,} logs show no improvement in loss")
 
@@ -163,8 +166,14 @@ def setup(**config):
     if config["task"] == "graph_modeling":
         model, loss_func = task_train_eval.setup_model(train_dataset.num_nodes, device, **config)
     elif config["task"] in {"multilabel_classification", "bioasq"}:
+        if config["task"] == "multilabel_classification":
+            num_labels = len(train_dataset.labels)
+            instance_dim = train_dataset.instance_dim
+        else:
+            num_labels = len(train_dataset.le.classes_)
+            instance_dim = 768  # FIXME has to be same as encoder model output!
         box_model, instance_encoder, scorer, label_label_loss_func = \
-            task_train_eval.setup_model(taxonomy_dataset.num_nodes, train_dataset.instance_dim, device, **config)
+            task_train_eval.setup_model(num_labels, instance_dim, device, **config)
 
     # setup optimizer
     if config["task"] == "graph_modeling":
@@ -227,7 +236,7 @@ def setup(**config):
             instance_model=instance_encoder,
             scorer=scorer,
             instance_label_dl=train_dataloader,
-            label_label_dl=taxonomy_dataloader,
+            # label_label_dl=taxonomy_dataloader,
             opt=opt,
             label_label_loss_func=label_label_loss_func,
             eval_loopers=eval_loopers,
