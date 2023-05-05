@@ -231,8 +231,7 @@ class MultilabelClassificationTrainLooper:
     box_model: Module
     instance_model: Module
     scorer: Module
-    instance_label_dl: DataLoader  # [(x1, l_{1_x1}), ..., (x1, l_{k_x1}), (x2, l_{1_x2}), ..., (x2, l_{k_x2})]  # used for positive examples
-    label_label_dl: DataLoader
+    dl: DataLoader
     opt: torch.optim.Optimizer
     label_label_loss_func: Callable
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
@@ -297,109 +296,107 @@ class MultilabelClassificationTrainLooper:
         :return: list of losses per batch
         """
 
-        examples_this_epoch = 0
-        examples_in_single_epoch = len(self.instance_label_dl.dataset)
         last_time_stamp = time.time()
         num_batch_passed = 0
-        label_label_iter = iter(self.label_label_dl)
-        for iteration, batch in enumerate(
-            tqdm(self.instance_label_dl, desc=f"[{self.name}] Batch", leave=False)
-        ):
 
-            # (batch_size, instance_feat_dim), (batch_size,)
-            instance_batch_in, label_batch_in = batch
+        logger.info(f'Start looping epoch {epoch}')
 
-            breakpoint()
+        for batch in self.dl:
 
-            # TODO introduce label set batch in
+            inputs, positives, negatives = batch
+            print(inputs)
+            print(positives)
+            print(negatives)
 
-            # TODO RandomNegativeEdges currently doesn't store adjacency matrix
-            positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
-            negative_label_label_idxs = self.label_label_dl.dataset.negative_sampler(positive_label_label_idxs)
-            label_label_batch_in = torch.cat([positive_label_label_idxs.unsqueeze(1), negative_label_label_idxs], dim=1)
+            # # TODO introduce label set batch in
 
-            # try:
-            #     label_label_batch_in = next(label_label_iter)
-            # except StopIteration:
-            #     label_label_iter = iter(self.label_label_dl)
-            #     label_label_batch_in = next(label_label_iter)
+            # # TODO RandomNegativeEdges currently doesn't store adjacency matrix
+            # positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
+            # negative_label_label_idxs = self.label_label_dl.dataset.negative_sampler(positive_label_label_idxs)
+            # label_label_batch_in = torch.cat([positive_label_label_idxs.unsqueeze(1), negative_label_label_idxs], dim=1)
 
-            self.opt.zero_grad()
+            # # try:
+            # #     label_label_batch_in = next(label_label_iter)
+            # # except StopIteration:
+            # #     label_label_iter = iter(self.label_label_dl)
+            # #     label_label_batch_in = next(label_label_iter)
 
-            num_in_batch = instance_batch_in.shape[0]
-            self.looper_metrics["Total Examples"] += num_in_batch
-            examples_this_epoch += num_in_batch
+            # self.opt.zero_grad()
 
-            # compute L_G for labels related to instance
-            label_label_batch_out = self.box_model(label_label_batch_in)
-            label_label_loss = self.label_label_loss_func(label_label_batch_out).sum(dim=0)
+            # num_in_batch = instance_batch_in.shape[0]
+            # self.looper_metrics["Total Examples"] += num_in_batch
+            # examples_this_epoch += num_in_batch
 
-            # compute instance encoding
-            # TODO need to tailor loss function to instance-label without negative samples
-            # TODO pass in padding mask for exact hierarchical negative sampling
-            instance_boxes = self.instance_model(instance_batch_in)     # (bsz, 2 [-/+], dim)
-            instance_label_batch_out = self.box_model.forward(idxs=label_batch_in, instances=instance_boxes)
+            # # compute L_G for labels related to instance
+            # label_label_batch_out = self.box_model(label_label_batch_in)
+            # label_label_loss = self.label_label_loss_func(label_label_batch_out).sum(dim=0)
+
+            # # compute instance encoding
+            # # TODO need to tailor loss function to instance-label without negative samples
+            # # TODO pass in padding mask for exact hierarchical negative sampling
+            # instance_boxes = self.instance_model(instance_batch_in)     # (bsz, 2 [-/+], dim)
+            # instance_label_batch_out = self.box_model.forward(idxs=label_batch_in, instances=instance_boxes)
             
-            # FIXME currently the loss fn expects a specified shape with negatives
-            # instance_label_loss = self.label_label_loss_func(instance_label_batch_out).sum(dim=0)
+            # # FIXME currently the loss fn expects a specified shape with negatives
+            # # instance_label_loss = self.label_label_loss_func(instance_label_batch_out).sum(dim=0)
 
-            loss = label_label_loss # + instance_label_loss
+            # loss = label_label_loss # + instance_label_loss
 
-            if torch.isnan(loss).any():
-                raise StopLoopingException("NaNs in loss")
-            self.running_losses.append(loss.detach().item())
-            loss.backward()
+            # if torch.isnan(loss).any():
+            #     raise StopLoopingException("NaNs in loss")
+            # self.running_losses.append(loss.detach().item())
+            # loss.backward()
 
-            for param in chain(self.box_model.parameters(), self.instance_model.parameters()):
-                if param.grad is not None:
-                    if torch.isnan(param.grad).any():
-                        raise StopLoopingException("NaNs in grad")
+            # for param in chain(self.box_model.parameters(), self.instance_model.parameters()):
+            #     if param.grad is not None:
+            #         if torch.isnan(param.grad).any():
+            #             raise StopLoopingException("NaNs in grad")
 
-            num_batch_passed += 1
-            # TODO: Refactor the following
-            self.opt.step()
-            # If you have a scheduler, keep track of the learning rate
-            if self.scheduler is not None:
-                self.scheduler.step()
-                if len(self.opt.param_groups) == 1:
-                    self.looper_metrics[f"Learning Rate"] = self.opt.param_groups[0][
-                        "lr"
-                    ]
-                else:
-                    for i, param_group in enumerate(self.opt.param_groups):
-                        self.looper_metrics[f"Learning Rate (Group {i})"] = param_group[
-                            "lr"
-                        ]
+            # num_batch_passed += 1
+            # # TODO: Refactor the following
+            # self.opt.step()
+            # # If you have a scheduler, keep track of the learning rate
+            # if self.scheduler is not None:
+            #     self.scheduler.step()
+            #     if len(self.opt.param_groups) == 1:
+            #         self.looper_metrics[f"Learning Rate"] = self.opt.param_groups[0][
+            #             "lr"
+            #         ]
+            #     else:
+            #         for i, param_group in enumerate(self.opt.param_groups):
+            #             self.looper_metrics[f"Learning Rate (Group {i})"] = param_group[
+            #                 "lr"
+            #             ]
 
-            # Check performance every self.log_interval number of examples
-            last_log = self.log_interval.last
+            # # Check performance every self.log_interval number of examples
+            # last_log = self.log_interval.last
 
-            if self.log_interval(self.looper_metrics["Total Examples"]):
-                current_time_stamp = time.time()
-                time_spend = (current_time_stamp - last_time_stamp) / num_batch_passed
-                last_time_stamp = current_time_stamp
-                num_batch_passed = 0
-                self.logger.collect({"avg_time_per_batch": time_spend})
+            # if self.log_interval(self.looper_metrics["Total Examples"]):
+            #     current_time_stamp = time.time()
+            #     time_spend = (current_time_stamp - last_time_stamp) / num_batch_passed
+            #     last_time_stamp = current_time_stamp
+            #     num_batch_passed = 0
+            #     self.logger.collect({"avg_time_per_batch": time_spend})
 
-                self.logger.collect(self.looper_metrics)
-                mean_loss = sum(self.running_losses) / (
-                    self.looper_metrics["Total Examples"] - last_log
-                )
-                metrics = {"Mean Loss": mean_loss}
-                self.logger.collect(
-                    {
-                        **{
-                            f"[{self.name}] {metric_name}": value
-                            for metric_name, value in metrics.items()
-                        },
-                        "Epoch": epoch + examples_this_epoch / examples_in_single_epoch,
-                    }
-                )
-                self.logger.commit()
-                self.running_losses = []
-                self.update_best_metrics_(metrics)
-                self.save_if_best_(self.best_metrics["Mean Loss"])
-                self.early_stopping(self.best_metrics["Mean Loss"])
+            #     self.logger.collect(self.looper_metrics)
+            #     mean_loss = sum(self.running_losses) / (
+            #         self.looper_metrics["Total Examples"] - last_log
+            #     )
+            #     metrics = {"Mean Loss": mean_loss}
+            #     self.logger.collect(
+            #         {
+            #             **{
+            #                 f"[{self.name}] {metric_name}": value
+            #                 for metric_name, value in metrics.items()
+            #             },
+            #             "Epoch": epoch + examples_this_epoch / examples_in_single_epoch,
+            #         }
+            #     )
+            #     self.logger.commit()
+            #     self.running_losses = []
+            #     self.update_best_metrics_(metrics)
+            #     self.save_if_best_(self.best_metrics["Mean Loss"])
+            #     self.early_stopping(self.best_metrics["Mean Loss"])
 
     def update_best_metrics_(self, metrics: Dict[str, float]) -> None:
         for name, comparison in self.best_metrics_comparison_functions.items():

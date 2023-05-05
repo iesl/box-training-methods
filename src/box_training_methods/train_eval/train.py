@@ -13,14 +13,13 @@ import torch
 import wandb
 from loguru import logger
 from torch.nn import Module
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from wandb_utils.loggers import WandBLogger
 
 from pytorch_utils import TensorDataLoader, cuda_if_available
 from pytorch_utils.training import EarlyStopping, ModelCheckpoint
 from .loopers import GraphModelingTrainLooper, MultilabelClassificationTrainLooper,\
     GraphModelingEvalLooper, MultilabelClassificationEvalLooper
-from box_training_methods.multilabel_classification.dataset import collate_mesh_fn
 from box_training_methods import metric_logger
 
 
@@ -150,7 +149,10 @@ def setup(**config):
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
         train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
-        # TODO create dataloader instantiated with collate_mesh_fn
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)
+        # TODO multiprocessing
 
     if isinstance(config["log_interval"], float):
         if config["task"] != "bioasq":
@@ -235,8 +237,7 @@ def setup(**config):
             box_model=box_model,
             instance_model=instance_encoder,
             scorer=scorer,
-            instance_label_dl=train_dataloader,
-            # label_label_dl=taxonomy_dataloader,
+            dl=train_dataloader,
             opt=opt,
             label_label_loss_func=label_label_loss_func,
             eval_loopers=eval_loopers,

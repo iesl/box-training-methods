@@ -180,19 +180,22 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
     mesh_name_id_path = Path(config["mesh_name_id_mapping_path"])
 
     train_dataset = BioASQInstanceLabelsIterDataset(
-        file_path=bioasq_path / "train.jsonl",
+        file_path=bioasq_path / "dev.jsonl",  # FIXME just for debugging
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        cycle=True
     )
     validation_dataset = BioASQInstanceLabelsIterDataset(
-        file_path=bioasq_path / "val.jsonl",
+        file_path=bioasq_path / "dev.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        cycle=False
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "test.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        cycle=False
     )
 
     return train_dataset, validation_dataset, test_dataset
