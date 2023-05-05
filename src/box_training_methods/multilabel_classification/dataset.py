@@ -294,7 +294,6 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         ancestor_encs = [nx.ancestors(self.G, l) for l in label_encs]
         ancestor_encs = set().union(*ancestor_encs)
         # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
-        breakpoint()
         return ancestor_encs
 
     def get_negatives(self, positives: np.ndarray) -> np.ndarray:
