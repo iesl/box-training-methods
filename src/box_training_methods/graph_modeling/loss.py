@@ -52,9 +52,39 @@ class BCEWithLogsNegativeSamplingLoss(Module):
 
         weights = F.softmax(logit_prob_neg, dim=-1)
         weighted_average_neg_loss = (weights * neg_loss).sum(dim=-1)
+        breakpoint()
         return (
             1 - self.negative_weight
         ) * pos_loss + self.negative_weight * weighted_average_neg_loss
+
+
+class BCEWithLogsNegativeSamplingLossMLC(Module):
+    def __init__(self, negative_weight: float = 0.5):
+        super().__init__()
+        self.negative_weight = negative_weight
+
+    def forward(self, log_prob_pos: Tensor, log_prob_neg, negative_padding_mask: Union[None, Tensor] = None) -> Tensor:
+        """
+        Returns a weighted BCE loss where:
+            (1 - negative_weight) * weighted_average(pos_loss) + negative_weight * weighted_average(neg_loss)
+
+        :param log_prob_pos: Tensor of shape (..., P)
+        :param log_prob_neg: Tensor of shape (..., N)
+        :return: weighted BCE loss
+        """
+
+        pos_loss = -log_prob_pos
+
+        neg_loss = -log1mexp(log_prob_neg)
+        logit_prob_neg = log_prob_neg + neg_loss
+
+        neg_weights = F.softmax(logit_prob_neg, dim=-1)
+        weighted_average_neg_loss = (neg_weights * neg_loss).sum(dim=-1)
+
+        pos_weights = F.softmax(pos_loss, dim=-1)
+        weighted_average_pos_loss = (pos_weights * pos_loss).sum(dim=-1)
+
+        return (1 - self.negative_weight) * weighted_average_pos_loss + self.negative_weight * weighted_average_neg_loss
 
 
 class BCEWithLogitsNegativeSamplingLoss(Module):
