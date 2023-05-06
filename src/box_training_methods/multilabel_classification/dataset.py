@@ -268,7 +268,6 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
     ancestors_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors"
     negatives_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives"
-    cycle: bool = True
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
@@ -346,24 +345,43 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             final_negatives = all_negatives.difference(all_positives)
             return np.array(list(final_negatives))
 
-    def parse_file(self, file_path):
+    def parse_file(self, file_path, worker_id=0, num_workers=5):
         with open(file_path, encoding="windows-1252", mode="r") as f:
-            for article in ijson.items(f, "articles.item"):
-                article["positives"] = self.le.transform(self.label_to_id(article["meshMajor"]))
-                article["extra_positive_edges"] = self.get_extra_positive_edges(
-                    article["meshMajor"]
-                )
-                article["negatives"] = self.get_negatives(article["positives"])
-                yield article
+            next(f)  # skip   {"articles":[  line
+            for i, line in enumerate(f):  # for article in ijson.items(f, "articles.item"):
+                if (i - worker_id) % num_workers == 0:
+                    # TODO parse line
+                    line = line.strip().rstrip(",")
+                    if line[-2:] == "]}":
+                        line = line[:-2]
+                    article = json.loads(line)  # every intermediate line ends with ",", last line ends with "]}"
+                    article = self.parse_article(article)
+                    yield article
+                else:
+                    # TODO skip line
+                    continue
+
+    def parse_article(self, article):
+        article["positives"] = self.le.transform(self.label_to_id(article["meshMajor"]))
+        article["extra_positive_edges"] = self.get_extra_positive_edges(
+            article["meshMajor"]
+        )
+        article["negatives"] = self.get_negatives(article["positives"])
+        return article
 
     def get_stream(self, file_path):
-        if self.cycle:
-            return cycle(self.parse_file(file_path))
-        else:
-            return self.parse_file(file_path)
+        return self.parse_file(file_path)
 
     def __iter__(self):
-        return self.get_stream(self.file_path)
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            worker_id = 0
+            num_workers = 1
+        else:  # in a worker process
+            # split workload
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+        return self.parse_file(file_path=self.file_path, worker_id=worker_id, num_workers=num_workers)
 
 
 def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsIterDataset):
@@ -398,7 +416,7 @@ def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsIterDataset):
 
 
 def write_bioasq_pmids_to_file():
-    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler())
     bioasq_iter = iter(bioasq)
     with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "+a") as f:
         while (x := next(bioasq_iter, None)) is not None:
@@ -421,7 +439,7 @@ def shuffle_and_split_bioasq_pmids():
 
 def distribute_mesh_articles_among_splits_based_on_pmids():
 
-    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler())
     bioasq_iter = iter(bioasq)
     with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "r") as f:
         train_pmids = {l.strip() for l in f.readlines() if l.strip()}
@@ -470,6 +488,6 @@ def distribute_mesh_articles_among_splits_based_on_pmids():
 
 
 if __name__ == "__main__":
-    bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", cycle=False)
+    bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json")
     bioasq_test_iter = iter(bioasq_test)
     print(next(bioasq_test_iter))

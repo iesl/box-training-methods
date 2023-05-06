@@ -149,10 +149,9 @@ def setup(**config):
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
         train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
-        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)
-        # TODO multiprocessing
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn, num_workers=5)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=5)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=5)
 
     if isinstance(config["log_interval"], float):
         if config["task"] != "bioasq":
@@ -174,7 +173,7 @@ def setup(**config):
         else:
             num_labels = len(train_dataset.le.classes_)
             instance_dim = 768  # FIXME has to be same as encoder model output!
-        box_model, instance_encoder, scorer, label_label_loss_func = \
+        box_model, instance_encoder, scorer, loss_func = \
             task_train_eval.setup_model(num_labels, instance_dim, device, **config)
 
     # setup optimizer
@@ -239,7 +238,7 @@ def setup(**config):
             scorer=scorer,
             dl=train_dataloader,
             opt=opt,
-            label_label_loss_func=label_label_loss_func,
+            loss_func=loss_func,
             eval_loopers=eval_loopers,
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
