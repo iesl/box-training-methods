@@ -52,7 +52,6 @@ class BCEWithLogsNegativeSamplingLoss(Module):
 
         weights = F.softmax(logit_prob_neg, dim=-1)
         weighted_average_neg_loss = (weights * neg_loss).sum(dim=-1)
-        breakpoint()
         return (
             1 - self.negative_weight
         ) * pos_loss + self.negative_weight * weighted_average_neg_loss
@@ -73,16 +72,17 @@ class BCEWithLogsNegativeSamplingLossMLC(Module):
         :return: weighted BCE loss
         """
 
-        pos_loss = -log_prob_pos
+        pos_loss = log1mexp(log_prob_pos)
+        logit_prob_pos = log_prob_pos - pos_loss
 
         neg_loss = -log1mexp(log_prob_neg)
         logit_prob_neg = log_prob_neg + neg_loss
 
+        pos_weights = F.softmax(logit_prob_pos, dim=-1)
+        weighted_average_pos_loss = (pos_weights * pos_loss).sum(dim=-1)
+
         neg_weights = F.softmax(logit_prob_neg, dim=-1)
         weighted_average_neg_loss = (neg_weights * neg_loss).sum(dim=-1)
-
-        pos_weights = F.softmax(pos_loss, dim=-1)
-        weighted_average_pos_loss = (pos_weights * pos_loss).sum(dim=-1)
 
         return (1 - self.negative_weight) * weighted_average_pos_loss + self.negative_weight * weighted_average_neg_loss
 

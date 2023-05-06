@@ -324,12 +324,9 @@ class MultilabelClassificationTrainLooper:
             loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
             loss = loss.sum(dim=0)
 
-
             if torch.isnan(loss).any():
                 raise StopLoopingException("NaNs in loss")
             self.running_losses.append(loss.detach().item())
-
-            logger.debug(f"Loss at epoch {epoch}: {loss.detach().item()}")
 
             loss.backward()
 
