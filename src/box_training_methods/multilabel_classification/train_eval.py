@@ -21,7 +21,7 @@ from box_training_methods.models.temps import (
 )
 from box_training_methods.models.box import BoxMinDeltaSoftplus, TBox
 from box_training_methods.graph_modeling.loss import (
-    BCEWithLogsNegativeSamplingLoss,
+    BCEWithLogsNegativeSamplingLossMLC,
     BCEWithLogitsNegativeSamplingLoss,
     BCEWithDistancesNegativeSamplingLoss,
     MaxMarginOENegativeSamplingLoss,
@@ -76,14 +76,14 @@ def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.dev
                 num_entities=num_labels,
             ),
         )
-        label_label_loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
+        loss_func = BCEWithLogsNegativeSamplingLossMLC(config["negative_weight"])
     elif model_type == "hard_box":
         box_model = TBox(
             num_labels,
             config["dim"],
             hard_box=True
         )
-        label_label_loss_func = PushApartPullTogetherLoss(config["negative_weight"])
+        loss_func = PushApartPullTogetherLoss(config["negative_weight"])
     else:
         raise ValueError(f'Model type {config["model_type"]} does not exist')
     box_model.to(device)
@@ -98,7 +98,7 @@ def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.dev
     # TODO args from click
     scorer = HardBoxScorer()
 
-    return box_model, instance_encoder, scorer, label_label_loss_func
+    return box_model, instance_encoder, scorer, loss_func
 
 
 def setup_training_data(device: Union[str, torch.device], **config) -> \
@@ -187,19 +187,16 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
         file_path=bioasq_path / "train.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
-        cycle=True
     )
     validation_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "dev.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
-        cycle=False
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "test.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
-        cycle=False
     )
 
     return train_dataset, validation_dataset, test_dataset

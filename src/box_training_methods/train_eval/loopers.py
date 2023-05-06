@@ -233,7 +233,7 @@ class MultilabelClassificationTrainLooper:
     scorer: Module
     dl: DataLoader
     opt: torch.optim.Optimizer
-    label_label_loss_func: Callable
+    loss_func: Callable
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
     eval_loopers: Iterable[EvalLooper] = attr.ib(factory=tuple)
     early_stopping: Callable = lambda z: None
@@ -301,43 +301,41 @@ class MultilabelClassificationTrainLooper:
 
         logger.info(f'Start looping epoch {epoch}')
 
-        for batch in self.dl:
+        for batch in self.dl:  # this is where dl creates num_workers workers; process gets forked, process mem replicated
+
+            self.opt.zero_grad()
 
             inputs, positives, negatives = batch
 
             input_encs = self.instance_model(inputs)
-            breakpoint()
+            positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
+            negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
 
-            # # TODO RandomNegativeEdges currently doesn't store adjacency matrix
-            # positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
-            # negative_label_label_idxs = self.label_label_dl.dataset.negative_sampler(positive_label_label_idxs)
-            # label_label_batch_in = torch.cat([positive_label_label_idxs.unsqueeze(1), negative_label_label_idxs], dim=1)
+            positive_energy = self.box_model.scores(instance_boxes=input_encs, 
+                                                    label_boxes=positive_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)
+            
+            negative_energy = self.box_model.scores(instance_boxes=input_encs,
+                                                    label_boxes=negative_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)            
+            # TODO input-label scorer
+            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
+            loss = loss.sum(dim=0)
 
-            # self.opt.zero_grad()
+
+            if torch.isnan(loss).any():
+                raise StopLoopingException("NaNs in loss")
+            self.running_losses.append(loss.detach().item())
+
+            logger.debug(f"Loss at epoch {epoch}: {loss.detach().item()}")
+
+            loss.backward()
 
             # num_in_batch = instance_batch_in.shape[0]
             # self.looper_metrics["Total Examples"] += num_in_batch
             # examples_this_epoch += num_in_batch
-
-            # # compute L_G for labels related to instance
-            # label_label_batch_out = self.box_model(label_label_batch_in)
-            # label_label_loss = self.label_label_loss_func(label_label_batch_out).sum(dim=0)
-
-            # # compute instance encoding
-            # # TODO need to tailor loss function to instance-label without negative samples
-            # # TODO pass in padding mask for exact hierarchical negative sampling
-            # instance_boxes = self.instance_model(instance_batch_in)     # (bsz, 2 [-/+], dim)
-            # instance_label_batch_out = self.box_model.forward(idxs=label_batch_in, instances=instance_boxes)
-            
-            # # FIXME currently the loss fn expects a specified shape with negatives
-            # # instance_label_loss = self.label_label_loss_func(instance_label_batch_out).sum(dim=0)
-
-            # loss = label_label_loss # + instance_label_loss
-
-            # if torch.isnan(loss).any():
-            #     raise StopLoopingException("NaNs in loss")
-            # self.running_losses.append(loss.detach().item())
-            # loss.backward()
 
             # for param in chain(self.box_model.parameters(), self.instance_model.parameters()):
             #     if param.grad is not None:
