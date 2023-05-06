@@ -27,6 +27,7 @@ class MeshInstanceEncoder(Module):
         self.output_dim = output_dim
 
         self.proj = torch.nn.Linear(1024, self.output_dim)  # TODO model-dependent dim
+        self.delta = torch.tensor(1.0e-5, requires_grad=False)
 
     def forward(self, inputs):
         inputs = {
@@ -36,5 +37,7 @@ class MeshInstanceEncoder(Module):
         outputs = self.model(**inputs)  # (batch_size, max_seq_len, dim)
         # TODO access CLS token specifically (c.f. CollateMeshFn)
         x = outputs.last_hidden_state[:,-1,:]  # (batch_size, dim)
-        x = self.proj(x)  # (batch_size, output_dim)
-        return x
+        instance_min = self.proj(x)  # (batch_size, output_dim)
+        instance_max = instance_min + self.delta
+        instance_box = torch.stack([instance_min, -instance_max], dim=-2)
+        return instance_box
