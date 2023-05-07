@@ -72,8 +72,8 @@ class BCEWithLogsNegativeSamplingLossMLC(Module):
         :return: weighted BCE loss
         """
 
-        pos_loss = log1mexp(log_prob_pos)
-        logit_prob_pos = log_prob_pos - pos_loss
+        pos_loss = -log_prob_pos
+        logit_prob_pos = log_prob_pos - log1mexp(log_prob_pos)
 
         neg_loss = -log1mexp(log_prob_neg)
         logit_prob_neg = log_prob_neg + neg_loss
