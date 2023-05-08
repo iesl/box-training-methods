@@ -218,6 +218,7 @@ class CollateMeshFn(object):
     def __init__(self, tokenizer):
         self.tokenizer = tokenizer
         self.PAD = self.tokenizer.pad_token_id
+        self.max_seq_len = 1000
     
     def __call__(self, batch):
         # TODO add CLS token at beginning or end?
@@ -271,6 +272,8 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
+    negative_ratio: int = 500
+
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
         self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer)
@@ -283,6 +286,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         self.G = nx.DiGraph(
             self.edges[:, [1, 0]].tolist()
         )  # reverse to parent-child format for DiGraph
+        logger.warning(f"num_nodes: {len(self.G.nodes())}")
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
         anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
@@ -343,7 +347,9 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
                 negs = self.read_set(os.path.join(self.negatives_cache_path, f"{p}-negatives.pkl"))
                 all_negatives = all_negatives.union(negs)
             final_negatives = all_negatives.difference(all_positives)
-            return np.array(list(final_negatives))
+            final_negatives = np.array(list(final_negatives))
+            sampled_negatives = np.random.choice(final_negatives, size=(self.negative_ratio,))
+            return sampled_negatives
 
     def parse_file(self, file_path, worker_id=0, num_workers=5):
         with open(file_path, encoding="windows-1252", mode="r") as f:
