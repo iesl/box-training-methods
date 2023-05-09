@@ -188,18 +188,21 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
+        train=True,
     )
     validation_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "dev.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
+        train=False,
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "test.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
+        train=False,
     )
 
     return train_dataset, validation_dataset, test_dataset

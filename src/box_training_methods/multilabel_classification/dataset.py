@@ -215,8 +215,9 @@ class InstanceLabelsDataset(Dataset):
 
 class CollateMeshFn(object):
 
-    def __init__(self, tokenizer):
+    def __init__(self, tokenizer, train):
         self.tokenizer = tokenizer
+        self.train = train
         self.PAD = self.tokenizer.pad_token_id
         self.max_seq_len = 1000
     
@@ -242,18 +243,22 @@ class CollateMeshFn(object):
         max_pos_len = max(map(len, positives))
         positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
         positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
-
-        negatives = [[m for m in x["negatives"]] for x in batch]
-        max_neg_len = max(map(len, negatives))
-        negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
-        negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
         
         xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
         max_xpos_len = max(map(len, xpositives))
         xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
         xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
 
-        return inputs, positives, negatives
+        if self.train:
+
+            negatives = [[m for m in x["negatives"]] for x in batch]
+            max_neg_len = max(map(len, negatives))
+            negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
+            negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+
+            return inputs, positives, negatives
+        
+        return inputs, positives
 
 
 @attr.s(auto_attribs=True)
@@ -275,12 +280,13 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
+    train: bool = True
     huggingface_encoder: str = "microsoft/biogpt"
     negative_ratio: int = 500
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
-        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer)
+        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train)
         self.edges, self.le = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path, mesh=True
         )
@@ -376,7 +382,8 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         article["extra_positive_edges"] = self.get_extra_positive_edges(
             article["meshMajor"]
         )
-        article["negatives"] = self.get_negatives(article["positives"])
+        if self.train:
+            article["negatives"] = self.get_negatives(article["positives"])
         return article
 
     def get_stream(self, file_path):
