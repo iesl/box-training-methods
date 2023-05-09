@@ -329,7 +329,7 @@ class MultilabelClassificationTrainLooper:
             self.running_losses.append(loss.detach().item())
 
             loss.backward()
-
+            logger.info(f"Loss: {loss.detach().item()}")
             # num_in_batch = instance_batch_in.shape[0]
             # self.looper_metrics["Total Examples"] += num_in_batch
             # examples_this_epoch += num_in_batch
