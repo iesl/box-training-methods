@@ -235,8 +235,8 @@ class CollateMeshFn(object):
             # padding=True,  # pad_token_id = 1
             max_length=self.max_seq_len,
         )
-        logger.critical(f"max_length={self.max_seq_len}")
-        logger.critical(f"inputs['input_ids'].shape={inputs['input_ids'].shape}")
+        # logger.warning(f"max_length={self.max_seq_len}")
+        # logger.warning(f"inputs['input_ids'].shape={inputs['input_ids'].shape}")
 
         positives = [[m for m in x["positives"]] for x in batch]
         max_pos_len = max(map(len, positives))

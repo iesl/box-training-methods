@@ -306,9 +306,9 @@ class MultilabelClassificationTrainLooper:
             self.opt.zero_grad()
 
             inputs, positives, negatives = batch
-            logger.warning(f"inputs: {inputs['input_ids'].shape}")
-            logger.warning(f"positives: {positives.shape}")
-            logger.warning(f"negatives: {negatives.shape}")
+            # logger.warning(f"inputs: {inputs['input_ids'].shape}")
+            # logger.warning(f"positives: {positives.shape}")
+            # logger.warning(f"negatives: {negatives.shape}")
             input_encs = self.instance_model(inputs)
             positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
             negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
