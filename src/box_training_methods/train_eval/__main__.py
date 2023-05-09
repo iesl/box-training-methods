@@ -54,6 +54,12 @@ class IntOrPercent(click.ParamType):
     help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
 )
 @click.option(
+    "--bioasq_huggingface_encoder",
+    type=str,
+    default="biogpt",
+    help="huggingface model identifier to use for encoding PubMed articles for bioasq",
+)
+@click.option(
     "--model_type",
     type=click.Choice(
         [

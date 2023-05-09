@@ -232,8 +232,11 @@ class CollateMeshFn(object):
                 for x in batch
             ],
             return_tensors="pt",
-            padding=True,  # pad_token_id = 1
+            # padding=True,  # pad_token_id = 1
+            max_length=self.max_seq_len,
         )
+        logger.critical(f"max_length={self.max_seq_len}")
+        logger.critical(f"inputs['input_ids'].shape={inputs['input_ids'].shape}")
 
         positives = [[m for m in x["positives"]] for x in batch]
         max_pos_len = max(map(len, positives))
@@ -272,10 +275,11 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
+    huggingface_encoder: str = "microsoft/biogpt"
     negative_ratio: int = 500
 
     def __attrs_post_init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
         self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer)
         self.edges, self.le = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path, mesh=True

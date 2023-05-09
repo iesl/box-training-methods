@@ -30,7 +30,7 @@ from box_training_methods.graph_modeling.loss import (
 from box_training_methods.multilabel_classification.instance_encoder import InstanceAsPointEncoder, InstanceAsBoxEncoder
 from box_training_methods.multilabel_classification.instance_scorers.instance_as_box_scorers.hard_box_scorer import HardBoxScorer
 
-from box_training_methods.multilabel_classification.mesh_instance_encoder import MeshInstanceEncoder
+from box_training_methods.multilabel_classification.bioasq_instance_encoder import BioASQInstanceEncoder
 
 __all__ = [
     "setup_model",
@@ -92,7 +92,7 @@ def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.dev
     if config["task"] == "multilabel_classification":
         instance_encoder = InstanceAsBoxEncoder(instance_dim=instance_dim, hidden_dim=64, output_dim=config["dim"])
     else:  # config["task"] == "bioasq"
-        instance_encoder = MeshInstanceEncoder(output_dim=config["dim"])
+        instance_encoder = BioASQInstanceEncoder(output_dim=config["dim"], huggingface_encoder=config["bioasq_huggingface_encoder"])
     instance_encoder.to(device)
 
     # TODO args from click
@@ -187,16 +187,19 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
         file_path=bioasq_path / "train.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        huggingface_encoder=config["bioasq_huggingface_encoder"],
     )
     validation_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "dev.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        huggingface_encoder=config["bioasq_huggingface_encoder"],
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "test.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        huggingface_encoder=config["bioasq_huggingface_encoder"],
     )
 
     return train_dataset, validation_dataset, test_dataset
