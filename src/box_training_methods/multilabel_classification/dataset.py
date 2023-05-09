@@ -219,21 +219,32 @@ class CollateMeshFn(object):
         self.tokenizer = tokenizer
         self.train = train
         self.PAD = self.tokenizer.pad_token_id
-        self.max_seq_len = 1000
+        self.max_seq_len = min(1000, self.tokenizer.model_max_length)
     
     def __call__(self, batch):
+
         # TODO add CLS token at beginning or end?
+        tok_input = []
+        for x in batch:
+            if x["journal"]:
+                journal = x["journal"]
+            else:
+                journal = ""
+            if x["title"]:
+                title = x["title"]
+            else:
+                title = ""
+            if x["abstractText"]:
+                abstractText = x["abstractText"]
+            else:
+                abstractText = ""
+            tok_input.append(journal + f" {self.tokenizer.sep_token} " + title + f" {self.tokenizer.sep_token} " + abstractText)
+
         inputs = self.tokenizer(
-            [
-                x["journal"]
-                + f" {self.tokenizer.sep_token} "
-                + x["title"]
-                + f" {self.tokenizer.sep_token} "
-                + x["abstractText"]
-                for x in batch
-            ],
+            tok_input,
             return_tensors="pt",
-            # padding=True,  # pad_token_id = 1
+            padding=True,  # pad_token_id = 1
+            truncation=True,
             max_length=self.max_seq_len,
         )
         # logger.warning(f"max_length={self.max_seq_len}")

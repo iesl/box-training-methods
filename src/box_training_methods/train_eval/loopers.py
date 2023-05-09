@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import os
 import json
+from pathlib import Path
 from typing import *
 
 import attr
@@ -307,89 +308,77 @@ class MultilabelClassificationTrainLooper:
 
         logger.info(f'Start looping epoch {epoch}')
 
-        for batch in self.dl:  # this is where dl creates num_workers workers; process gets forked, process mem replicated
+        batch_times = []
+        batch_sum = 0
+        step = 0
 
-            self.opt.zero_grad()
+        begin_dl_iter = time.time()
+        dl_iter = iter(self.dl)
+        
+        while True:
 
-            inputs, positives, negatives = batch
-            # logger.warning(f"inputs: {inputs['input_ids'].shape}")
-            # logger.warning(f"positives: {positives.shape}")
-            # logger.warning(f"negatives: {negatives.shape}")
-            input_encs = self.instance_model(inputs)
-            positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
-            negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
-            positive_energy = self.box_model.scores(instance_boxes=input_encs, 
-                                                    label_boxes=positive_boxes, 
-                                                    intersection_temp=0.01, 
-                                                    volume_temp=1.0)
-            negative_energy = self.box_model.scores(instance_boxes=input_encs,
-                                                    label_boxes=negative_boxes, 
-                                                    intersection_temp=0.01, 
-                                                    volume_temp=1.0)            
-            # TODO input-label scorer
-            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
-            loss = loss.sum(dim=0)
+            try:
+                begin_batch = time.time()
+                self.opt.zero_grad()
 
-            if torch.isnan(loss).any():
-                raise StopLoopingException("NaNs in loss")
-            self.running_losses.append(loss.detach().item())
+                begin_next = time.time()
+                batch = next(dl_iter)
+                end_next = time.time()
+                logger.critical(f"\nnext took {end_next - begin_next} seconds")
 
-            loss.backward()
-            logger.info(f"Loss: {loss.detach().item()}")
-            # num_in_batch = instance_batch_in.shape[0]
-            # self.looper_metrics["Total Examples"] += num_in_batch
-            # examples_this_epoch += num_in_batch
+                inputs, positives, negatives = batch
+                # logger.warning(f"inputs: {inputs['input_ids'].shape}")
+                # logger.warning(f"positives: {positives.shape}")
+                # logger.warning(f"negatives: {negatives.shape}")
 
-            # for param in chain(self.box_model.parameters(), self.instance_model.parameters()):
-            #     if param.grad is not None:
-            #         if torch.isnan(param.grad).any():
-            #             raise StopLoopingException("NaNs in grad")
+                begin_nn = time.time()
+                input_encs = self.instance_model(inputs)
+                
+                positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
+                negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
+                positive_energy = self.box_model.scores(instance_boxes=input_encs, 
+                                                        label_boxes=positive_boxes, 
+                                                        intersection_temp=0.01, 
+                                                        volume_temp=1.0)
+                negative_energy = self.box_model.scores(instance_boxes=input_encs,
+                                                        label_boxes=negative_boxes, 
+                                                        intersection_temp=0.01, 
+                                                        volume_temp=1.0)
+                end_nn = time.time()
+                logger.critical(f"NNs took {end_nn - begin_nn} seconds")
 
-            # num_batch_passed += 1
-            # # TODO: Refactor the following
-            # self.opt.step()
-            # # If you have a scheduler, keep track of the learning rate
-            # if self.scheduler is not None:
-            #     self.scheduler.step()
-            #     if len(self.opt.param_groups) == 1:
-            #         self.looper_metrics[f"Learning Rate"] = self.opt.param_groups[0][
-            #             "lr"
-            #         ]
-            #     else:
-            #         for i, param_group in enumerate(self.opt.param_groups):
-            #             self.looper_metrics[f"Learning Rate (Group {i})"] = param_group[
-            #                 "lr"
-            #             ]
+                # TODO input-label scorer
+                begin_loss_back = time.time()
+                loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
+                loss = loss.sum(dim=0)
 
-            # # Check performance every self.log_interval number of examples
-            # last_log = self.log_interval.last
+                if torch.isnan(loss).any():
+                    raise StopLoopingException("NaNs in loss")
+                self.running_losses.append(loss.detach().item())
 
-            # if self.log_interval(self.looper_metrics["Total Examples"]):
-            #     current_time_stamp = time.time()
-            #     time_spend = (current_time_stamp - last_time_stamp) / num_batch_passed
-            #     last_time_stamp = current_time_stamp
-            #     num_batch_passed = 0
-            #     self.logger.collect({"avg_time_per_batch": time_spend})
+                loss.backward()
+                end_loss_back = time.time()
+                logger.critical(f"Loss and backward took {end_loss_back - begin_loss_back} seconds")
 
-            #     self.logger.collect(self.looper_metrics)
-            #     mean_loss = sum(self.running_losses) / (
-            #         self.looper_metrics["Total Examples"] - last_log
-            #     )
-            #     metrics = {"Mean Loss": mean_loss}
-            #     self.logger.collect(
-            #         {
-            #             **{
-            #                 f"[{self.name}] {metric_name}": value
-            #                 for metric_name, value in metrics.items()
-            #             },
-            #             "Epoch": epoch + examples_this_epoch / examples_in_single_epoch,
-            #         }
-            #     )
-            #     self.logger.commit()
-            #     self.running_losses = []
-            #     self.update_best_metrics_(metrics)
-            #     self.save_if_best_(self.best_metrics["Mean Loss"])
-            #     self.early_stopping(self.best_metrics["Mean Loss"])
+                end_batch = time.time()
+
+                batch_delta = end_batch - begin_batch
+                batch_times.append(batch_delta)
+                step += 1
+                batch_sum += batch_delta
+                logger.critical(f"Batch took {batch_delta} seconds")        
+                logger.critical(f"Batch running avg: {batch_sum / step}")
+
+                if step % 5000 == 0:
+                    self.save_models(epoch=epoch, step=step)
+
+            except StopIteration:
+                break
+
+        end_dl_iter = time.time()
+        logger.critical(f"Iterating through dl took {str(end_dl_iter - begin_dl_iter)} seconds")
+
+        breakpoint()
 
     def update_best_metrics_(self, metrics: Dict[str, float]) -> None:
         for name, comparison in self.best_metrics_comparison_functions.items():
@@ -411,6 +400,20 @@ class MultilabelClassificationTrainLooper:
             self.save_box_model(self.box_model)
             self.save_instance_model(self.instance_model)
             self.previous_best = best_metric
+
+    def save_models(self, epoch, step) -> None:
+        
+        logger.critical(f"box_model run_dir: {self.save_box_model.run_dir}")
+        self.save_box_model(self.box_model)
+        self.save_box_model.run_dir = Path("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models")
+        self.save_box_model.filename = f'tbox.epoch-{epoch}.step-{step}.pt'
+        self.save_box_model.save_to_disk(None)
+        
+        logger.critical(f"instance_model run_dir: {self.save_instance_model.run_dir}")
+        self.save_instance_model(self.instance_model)
+        self.save_instance_model.run_dir = Path("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models")
+        self.save_instance_model.filename = f'embeddings.epoch-{epoch}.step-{step}.pt'
+        self.save_instance_model.save_to_disk(None)
 
 
 @attr.s(auto_attribs=True)
@@ -510,7 +513,8 @@ class GraphModelingEvalLooper:
 @attr.s(auto_attribs=True)
 class MultilabelClassificationEvalLooper:
     name: str
-    model: Module
+    box_model: Module
+    instance_model: Module
     dl: DataLoader
     batchsize: int
     logger: Logger = attr.ib(factory=Logger)
@@ -520,5 +524,18 @@ class MultilabelClassificationEvalLooper:
     def loop(self) -> Dict[str, Any]:
         self.model.eval()
 
-        for batch in self.dl:
-            inputs, positives = batch
+        dl_iter = iter(self.dl)
+        while True:
+
+            try:
+                batch = next(dl_iter)
+                inputs, positives = batch
+                input_encs = self.instance_model(inputs)
+                energy = self.box_model.scores(instance_boxes=input_encs,
+                                               label_boxes=self.box_model.boxes,
+                                               intersection_temp=0.01,
+                                               volume_temp=1.0)
+                # TODO compute predictions from energy score
+
+            except StopIteration:
+                break

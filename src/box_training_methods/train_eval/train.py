@@ -149,9 +149,9 @@ def setup(**config):
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
         train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
-        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn, num_workers=5)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=5)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=5)
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn, num_workers=12)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
 
     if isinstance(config["log_interval"], float):
         if config["task"] != "bioasq":
