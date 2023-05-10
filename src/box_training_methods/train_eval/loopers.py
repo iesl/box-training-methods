@@ -529,7 +529,7 @@ class MultilabelClassificationEvalLooper:
 
             try:
                 batch = next(dl_iter)
-                inputs, positives = batch
+                inputs, labels = batch
                 input_encs = self.instance_model(inputs)                                         # (batch_size, 2, dim)
                 label_boxes = self.box_model.boxes.unsqueeze(dim=0)                              # (1, num_labels, 2, dim)
                 label_boxes = label_boxes.repeat(input_encs.shape[0], 1, 1, 1)                   # (batch_size, num_labels, 2, dim)
@@ -538,6 +538,7 @@ class MultilabelClassificationEvalLooper:
                                                intersection_temp=0.01,
                                                volume_temp=1.0)
                 # TODO compute predictions from energy score
+                metrics = calculate_optimal_F1(torch.flatten(labels).numpy(), torch.flatten(energy).cpu().numpy())
                 breakpoint()
 
             except StopIteration:

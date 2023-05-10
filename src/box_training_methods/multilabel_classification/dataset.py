@@ -215,11 +215,12 @@ class InstanceLabelsDataset(Dataset):
 
 class CollateMeshFn(object):
 
-    def __init__(self, tokenizer, train):
+    def __init__(self, tokenizer, train, num_labels):
         self.tokenizer = tokenizer
         self.train = train
         self.PAD = self.tokenizer.pad_token_id
         self.max_seq_len = min(1000, self.tokenizer.model_max_length)
+        self.num_labels = num_labels
     
     def __call__(self, batch):
 
@@ -250,17 +251,17 @@ class CollateMeshFn(object):
         # logger.warning(f"max_length={self.max_seq_len}")
         # logger.warning(f"inputs['input_ids'].shape={inputs['input_ids'].shape}")
 
-        positives = [[m for m in x["positives"]] for x in batch]
-        max_pos_len = max(map(len, positives))
-        positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
-        positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
-        
-        xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
-        max_xpos_len = max(map(len, xpositives))
-        xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
-        xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
-
         if self.train:
+
+            positives = [[m for m in x["positives"]] for x in batch]
+            max_pos_len = max(map(len, positives))
+            positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
+            positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+            
+            xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+            max_xpos_len = max(map(len, xpositives))
+            xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+            xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
 
             negatives = [[m for m in x["negatives"]] for x in batch]
             max_neg_len = max(map(len, negatives))
@@ -269,7 +270,16 @@ class CollateMeshFn(object):
 
             return inputs, positives, negatives
         
-        return inputs, positives
+        else:
+            
+            labels = [torch.tensor(list(set(x['positives']).union(x['extra_positive_edges']))) for x in batch]
+
+            targets = []
+            for i in range(len(labels)):
+                targets.append(torch.zeros((self.num_labels,)).scatter_(0, labels[i], 1.0).tolist())
+            targets = torch.tensor(targets)
+
+            return inputs, targets
 
 
 @attr.s(auto_attribs=True)
@@ -297,7 +307,6 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
-        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train)
         self.edges, self.le = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path, mesh=True
         )
@@ -308,6 +317,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             self.edges[:, [1, 0]].tolist()
         )  # reverse to parent-child format for DiGraph
         logger.warning(f"num_nodes: {len(self.G.nodes())}")
+        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
         anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
