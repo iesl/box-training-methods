@@ -173,7 +173,7 @@ def setup(**config):
         else:
             num_labels = len(train_dataset.le.classes_)
             instance_dim = 768  # FIXME has to be same as encoder model output!
-        box_model, instance_encoder, scorer, loss_func = \
+        box_model, instance_encoder, loss_func = \
             task_train_eval.setup_model(num_labels, instance_dim, device, **config)
 
     # setup optimizer
@@ -206,13 +206,15 @@ def setup(**config):
             eval_loopers.extend([
                 MultilabelClassificationEvalLooper(
                     name="Validation",
-                    model=box_model,
+                    box_model=box_model,
+                    instance_model=instance_encoder,
                     dl=dev_dataloader,
                     batchsize=2 ** config["log_eval_batch_size"],
                 ),
                 MultilabelClassificationEvalLooper(
                     name="Test",
-                    model=box_model,
+                    box_model=box_model,
+                    instance_model=instance_encoder,
                     dl=test_dataloader,
                     batchsize=2 ** config["log_eval_batch_size"],
                 )
@@ -235,7 +237,6 @@ def setup(**config):
             name="Train",
             box_model=box_model,
             instance_model=instance_encoder,
-            scorer=scorer,
             dl=train_dataloader,
             opt=opt,
             loss_func=loss_func,
@@ -247,6 +248,6 @@ def setup(**config):
     if config["task"] == "graph_modeling":
         models = (model,)
     elif config["task"] in {"multilabel_classification", "bioasq"}:
-        models = (box_model, instance_encoder, scorer)
+        models = (box_model, instance_encoder)
 
     return models, train_looper

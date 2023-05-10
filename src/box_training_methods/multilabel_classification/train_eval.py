@@ -21,6 +21,7 @@ from box_training_methods.models.temps import (
 )
 from box_training_methods.models.box import BoxMinDeltaSoftplus, TBox
 from box_training_methods.graph_modeling.loss import (
+    BCEWithLogsNegativeSamplingLoss,
     BCEWithLogsNegativeSamplingLossMLC,
     BCEWithLogitsNegativeSamplingLoss,
     BCEWithDistancesNegativeSamplingLoss,
@@ -39,53 +40,35 @@ __all__ = [
 ]
 
 
-def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.device], **config) -> Tuple[Module, Callable]:
-    model_type = config["model_type"].lower()
-    if model_type == "gumbel_box":
-        box_model = BoxMinDeltaSoftplus(
-            num_labels,
-            config["dim"],
-            volume_temp=config["box_volume_temp"],
-            intersection_temp=config["box_intersection_temp"],
-        )
-        label_label_loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
-    elif model_type == "tbox":
-        temp_type = {
-            "global": GlobalTemp,
-            "per_dim": PerDimTemp,
-            "per_entity": PerEntityTemp,
-            "per_entity_per_dim": PerEntityPerDimTemp,
-        }
-        Temp = temp_type[config["tbox_temperature_type"]]
+def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.device], eval_only=False, **config) -> Tuple[Module, Callable]:
+    temp_type = {
+        "global": GlobalTemp,
+        "per_dim": PerDimTemp,
+        "per_entity": PerEntityTemp,
+        "per_entity_per_dim": PerEntityPerDimTemp,
+    }
+    Temp = temp_type[config["tbox_temperature_type"]]
 
-        box_model = TBox(
-            num_labels,
-            config["dim"],
-            intersection_temp=Temp(
-                config["box_intersection_temp"],
-                0.0001,
-                100,
-                dim=config["dim"],
-                num_entities=num_labels,
-            ),
-            volume_temp=Temp(
-                config["box_volume_temp"],
-                0.01,
-                1000,
-                dim=config["dim"],
-                num_entities=num_labels,
-            ),
-        )
+    box_model = TBox(
+        num_labels,
+        config["dim"],
+        intersection_temp=Temp(
+            config["box_intersection_temp"],
+            0.0001,
+            100,
+            dim=config["dim"],
+            num_entities=num_labels,
+        ),
+        volume_temp=Temp(
+            config["box_volume_temp"],
+            0.01,
+            1000,
+            dim=config["dim"],
+            num_entities=num_labels,
+        ),
+    )
+    if not eval_only:
         loss_func = BCEWithLogsNegativeSamplingLossMLC(config["negative_weight"])
-    elif model_type == "hard_box":
-        box_model = TBox(
-            num_labels,
-            config["dim"],
-            hard_box=True
-        )
-        loss_func = PushApartPullTogetherLoss(config["negative_weight"])
-    else:
-        raise ValueError(f'Model type {config["model_type"]} does not exist')
     box_model.to(device)
 
     # TODO args from click
@@ -95,10 +78,13 @@ def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.dev
         instance_encoder = BioASQInstanceEncoder(output_dim=config["dim"], huggingface_encoder=config["bioasq_huggingface_encoder"])
     instance_encoder.to(device)
 
-    # TODO args from click
-    scorer = HardBoxScorer()
+    if not eval_only:
+        return box_model, instance_encoder, loss_func
 
-    return box_model, instance_encoder, scorer, loss_func
+    instance_encoder.load_state_dict(torch.load(config["instance_encoder_path"]))
+    box_model.load_state_dict(torch.load(config["box_model_path"]))
+
+    return box_model, instance_encoder
 
 
 def setup_training_data(device: Union[str, torch.device], **config) -> \
@@ -177,19 +163,21 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     return taxonomy_dataset, train_dataset, dev_dataset, test_dataset
 
 
-def setup_mesh_training_data(device: Union[str, torch.device], **config):
-    start = time()
+def setup_mesh_training_data(device: Union[str, torch.device], eval_only: bool = False, **config):
+
     bioasq_path = Path(config["data_path"])
     mesh_parent_child_path = Path(config["mesh_parent_child_mapping_path"])
     mesh_name_id_path = Path(config["mesh_name_id_mapping_path"])
 
-    train_dataset = BioASQInstanceLabelsIterDataset(
-        file_path=bioasq_path / "train.jsonl",
-        parent_child_mapping_path=mesh_parent_child_path,
-        name_id_mapping_path=mesh_name_id_path,
-        huggingface_encoder=config["bioasq_huggingface_encoder"],
-        train=True,
-    )
+    if not eval_only:
+        train_dataset = BioASQInstanceLabelsIterDataset(
+            file_path=bioasq_path / "train.jsonl",
+            parent_child_mapping_path=mesh_parent_child_path,
+            name_id_mapping_path=mesh_name_id_path,
+            huggingface_encoder=config["bioasq_huggingface_encoder"],
+            train=True,
+        )
+
     validation_dataset = BioASQInstanceLabelsIterDataset(
         file_path=bioasq_path / "dev.jsonl",
         parent_child_mapping_path=mesh_parent_child_path,
@@ -205,4 +193,7 @@ def setup_mesh_training_data(device: Union[str, torch.device], **config):
         train=False,
     )
 
-    return train_dataset, validation_dataset, test_dataset
+    if not eval_only:
+        return train_dataset, validation_dataset, test_dataset
+
+    return validation_dataset, test_dataset

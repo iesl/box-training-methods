@@ -212,13 +212,13 @@ class TBox(Module):
     def scores(self, instance_boxes, label_boxes, intersection_temp, volume_temp):
         """
         instance_boxes: (batch_size, 2 (min/-max), dim)
-        label_boxes:    (batch_size, num_{pos/neg}, 2 (min/-max), dim)
+        label_boxes:    (batch_size, num_labels, 2 (min/-max), dim)
         """
 
-        label_boxes = label_boxes.unsqueeze(dim=2)                                                                  # (batch_size, num_{pos/neg},       1, 2 (min/-max), dim)
-        instance_boxes = torch.broadcast_to(instance_boxes.unsqueeze(dim=1).unsqueeze(dim=1), label_boxes.shape)    # (batch_size, 1 -> num_{pos/neg},  1, 2 (min/-max), dim)
-
-        boxes = torch.cat([label_boxes, instance_boxes], dim=2)   # (batch_size, num_{pos/neg}, 2 (u/v), 2 (min/-max), dim)
+        label_boxes = label_boxes.unsqueeze(dim=2)                                                                  # (batch_size, num_labels,       1, 2 (min/-max), dim)
+        instance_boxes = torch.broadcast_to(instance_boxes.unsqueeze(dim=1).unsqueeze(dim=1), label_boxes.shape)    # (batch_size, 1 -> num_labels,  1, 2 (min/-max), dim)
+        
+        boxes = torch.cat([label_boxes, instance_boxes], dim=2)   # (batch_size, num_labels, 2 (u/v), 2 (min/-max), dim)
 
         # calculate Gumbel intersection
         intersection = intersection_temp * torch.logsumexp(

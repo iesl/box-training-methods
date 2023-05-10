@@ -231,7 +231,6 @@ class MultilabelClassificationTrainLooper:
     name: str
     box_model: Module
     instance_model: Module
-    scorer: Module
     dl: DataLoader
     opt: torch.optim.Optimizer
     loss_func: Callable
@@ -369,7 +368,7 @@ class MultilabelClassificationTrainLooper:
                 logger.critical(f"Batch took {batch_delta} seconds")        
                 logger.critical(f"Batch running avg: {batch_sum / step}")
 
-                if step % 5000 == 0:
+                if step % 1000 == 0:
                     self.save_models(epoch=epoch, step=step)
 
             except StopIteration:
@@ -522,7 +521,8 @@ class MultilabelClassificationEvalLooper:
 
     @torch.no_grad()
     def loop(self) -> Dict[str, Any]:
-        self.model.eval()
+        self.instance_model.eval()
+        self.box_model.eval()
 
         dl_iter = iter(self.dl)
         while True:
@@ -530,12 +530,15 @@ class MultilabelClassificationEvalLooper:
             try:
                 batch = next(dl_iter)
                 inputs, positives = batch
-                input_encs = self.instance_model(inputs)
+                input_encs = self.instance_model(inputs)                                         # (batch_size, 2, dim)
+                label_boxes = self.box_model.boxes.unsqueeze(dim=0)                              # (1, num_labels, 2, dim)
+                label_boxes = label_boxes.repeat(input_encs.shape[0], 1, 1, 1)                   # (batch_size, num_labels, 2, dim)
                 energy = self.box_model.scores(instance_boxes=input_encs,
-                                               label_boxes=self.box_model.boxes,
+                                               label_boxes=label_boxes,
                                                intersection_temp=0.01,
                                                volume_temp=1.0)
                 # TODO compute predictions from energy score
+                breakpoint()
 
             except StopIteration:
                 break

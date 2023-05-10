@@ -56,7 +56,7 @@ class IntOrPercent(click.ParamType):
 @click.option(
     "--bioasq_huggingface_encoder",
     type=str,
-    default="biogpt",
+    default="microsoft/biogpt",
     help="huggingface model identifier to use for encoding PubMed articles for bioasq",
 )
 @click.option(
@@ -253,6 +253,81 @@ def train(**config):
 
 
 @click.command(context_settings=dict(show_default=True),)
-def eval():
+@click.option(
+    "--task",
+    type=click.Choice(["bioasq"], case_sensitive=False),
+    help="task to train on, currently only necessary for BioASQ",
+    required=True
+)
+@click.option(
+    "--data_path",
+    type=click.Path(),
+    help="directory or file with data (eg. data/graph/some_tree)",
+    required=True,
+)
+@click.option(
+    "--mesh_parent_child_mapping_path",
+    type=click.Path(),
+    help="parent-child mapping text file, e.g. 'MeSH_parent_child_mapping_2020.txt'",
+)
+@click.option(
+    "--mesh_name_id_mapping_path",
+    type=click.Path(),
+    help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
+)
+@click.option(
+    "--bioasq_huggingface_encoder",
+    type=str,
+    default="microsoft/biogpt",
+    help="huggingface model identifier to use for encoding PubMed articles for bioasq",
+)
+@click.option(
+    "--instance_encoder_path",
+    type=str,
+    help="path to saved instance encoder",
+)
+@click.option(
+    "--box_model_path",
+    type=str,
+    help="path to saved box model",
+)
+@click.option(
+    "--cuda / --no_cuda", default=True, help="enable/disable CUDA (eg. no nVidia GPU)",
+)
+@click.option(
+    "--wandb / --no_wandb",
+    default=False,
+    help="enable/disable logging to Weights and Biases",
+)
+@click.option(
+    "--dim", type=int, default=4, help="dimension for embedding space",
+)
+@click.option(
+    "--log_batch_size",
+    type=int,
+    default=10,
+    help="batch size for training will be 2**LOG_BATCH_SIZE",
+)  # Using batch sizes which are 2**n for some integer n may help optimize GPU efficiency
+@click.option(
+    "--box_intersection_temp",
+    type=float,
+    default=0.01,
+    help="temperature of intersection calculation (hyperparameter for gumbel_box, initialized value for tbox)",
+)
+@click.option(
+    "--box_volume_temp",
+    type=float,
+    default=1.0,
+    help="temperature of volume calculation (hyperparameter for gumbel_box, initialized value for tbox)",
+)
+@click.option(
+    "--tbox_temperature_type",
+    type=click.Choice(["global", "per_dim", "per_entity", "per_entity_per_dim"]),
+    default="per_entity_per_dim",
+    help="type of learned temperatures (for tbox model)",
+)
+def eval(**config):
     """Evaluate an embedding representation on a task with boxes"""
-    pass
+    from .eval import evaluation
+
+    evaluation(config)
