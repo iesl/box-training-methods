@@ -382,6 +382,22 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             sampled_negatives = np.random.choice(final_negatives, size=(self.negative_ratio,))
             return sampled_negatives
 
+    def prune_positives(self, positives: np.ndarray) -> np.ndarray:
+        prune = set()
+        for l1 in positives:
+            if l1 not in prune:
+                l1_ancestors = nx.ancestors(self.G, l1)
+                for l2 in positives:
+                    if l1 != l2:
+                        # if l2 is an ancestor of l1, drop l2
+                        if l2 in l1_ancestors:
+                            prune.add(l2)
+        keep = list(set(positives).difference(prune))
+        return np.array(keep)
+
+    def prune_positives_v2(self, positives: np.ndarray, ancestor_set: set) -> np.ndarray:
+        return np.array(list(set(positives).difference(ancestor_set)))
+
     def parse_file(self, file_path, worker_id=0, num_workers=5):
         with open(file_path, encoding="windows-1252", mode="r") as f:
             next(f)  # skip   {"articles":[  line
@@ -403,6 +419,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         article["extra_positive_edges"] = self.get_extra_positive_edges(
             article["meshMajor"]
         )
+        article["positives"] = self.prune_positives_v2(article["positives"], ancestor_set=article["extra_positive_edges"])
         if self.train:
             article["negatives"] = self.get_negatives(article["positives"])
         return article
@@ -525,7 +542,32 @@ def distribute_mesh_articles_among_splits_based_on_pmids():
         f.write("]}")
 
 
+def check_no_two_labels_have_ancestor_relationship():
+    bioasq = BioASQInstanceLabelsIterDataset()
+    bioasq_iter = iter(bioasq)
+    count_ancestors = 0
+    count_no_ancestors = 0
+    for i in range(10000):
+        print(i)
+        article = next(bioasq_iter)
+        # print(f"processing article {article['pmid']}")
+        ancestor_descendant_pair = False
+        for label_a in article['positives']:
+            for label_b in article['positives']:
+                if label_b in nx.ancestors(bioasq.G, label_a):
+                    ancestor_descendant_pair = True
+                    descendant_label = bioasq.id_name[bioasq.le.inverse_transform([label_a]).item()]
+                    ancestor_label = bioasq.id_name[bioasq.le.inverse_transform([label_b]).item()]
+                    # print(f"article {article['pmid']} has descendant~ancestor pair {descendant_label} ~ {ancestor_label}")
+        if ancestor_descendant_pair:
+            count_ancestors += 1
+        else:
+            count_no_ancestors += 1
+    breakpoint()
+
 if __name__ == "__main__":
-    bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json")
-    bioasq_test_iter = iter(bioasq_test)
-    print(next(bioasq_test_iter))
+    # bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json")
+    # bioasq_test_iter = iter(bioasq_test)
+    # print(next(bioasq_test_iter))
+
+    check_no_two_labels_have_ancestor_relationship()
