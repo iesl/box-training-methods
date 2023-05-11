@@ -565,9 +565,39 @@ def check_no_two_labels_have_ancestor_relationship():
             count_no_ancestors += 1
     breakpoint()
 
+
+def convert_decs_obo_to_parent_child_format(decs_obo_fp="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.obo",
+                                            output_parent_child_fp="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt"):
+    
+    with open(decs_obo_fp, "r") as f:
+        chunks = f.read().strip().split("\n\n")
+        
+    chunks = [c.strip().split("\n") for c in chunks[2:]]
+
+    def process_chunk(c):
+        id = [x for x in c if x.startswith('id: ')]
+        assert len(id) == 1
+        id = id[0][len('id: '):].strip('"')
+        is_a = [x[len('is_a: '):].strip('"') for x in c if x.startswith('is_a: ')]
+        return id, is_a
+
+    id_to_is_a = list()
+    for c in chunks:
+        id, is_a = process_chunk(c)
+        id_to_is_a.append((id, is_a))
+
+    parent_child_mapping = []
+    for child, parents in id_to_is_a:
+        for parent in parents:
+            parent_child_mapping.append((parent, child))
+
+    with open(output_parent_child_fp, "w") as f:
+        f.write("\n".join(["\t".join(l) for l in parent_child_mapping]))
+
+
 if __name__ == "__main__":
     # bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json")
     # bioasq_test_iter = iter(bioasq_test)
     # print(next(bioasq_test_iter))
 
-    check_no_two_labels_have_ancestor_relationship()
+    convert_decs_obo_to_parent_child_format()
