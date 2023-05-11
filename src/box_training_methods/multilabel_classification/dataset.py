@@ -336,11 +336,13 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         logger.warning(f"num_nodes: {len(self.G.nodes())}")
 
         if self.english:
-            self.ID = "pmid"
-            self.LABELS = "meshMajor"
+            self.ID_KEY = "pmid"
+            self.LABELS_KEY = "meshMajor"
+            self.ENCODING="windows-1252"
         else:  # MESINESP
-            self.ID = "id"
-            self.LABELS = "decsCodes"
+            self.ID_KEY = "id"
+            self.LABELS_KEY = "decsCodes"
+            self.ENCODING="utf-8"
 
         self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
 
@@ -381,7 +383,10 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         """Uses the MESH hierarchy to find extra positive edges for the labels.
         These are edges from positive children to positive ancestors.
         """
-        label_encs = self.le.transform(self.label_to_id(labels))
+        if self.english:
+            label_encs = self.le.transform(self.label_to_id(labels))
+        else:
+            label_encs = self.le.transform(labels)
         ancestor_encs = [nx.ancestors(self.G, l) for l in label_encs]
         ancestor_encs = set().union(*ancestor_encs)
         # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
@@ -424,13 +429,13 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         return np.array(list(set(positives).difference(ancestor_set)))
 
     def parse_file(self, file_path, worker_id=0, num_workers=5):
-        with open(file_path, encoding="windows-1252", mode="r") as f:
+        with open(file_path, encoding=self.ENCODING, mode="r") as f:
             next(f)  # skip   {"articles":[  line
             for i, line in enumerate(f):  # for article in ijson.items(f, "articles.item"):
                 if (i - worker_id) % num_workers == 0:
                     # TODO parse line
                     line = line.strip().rstrip(",")
-                    if line[-2:] == "]}":
+                    if line[-2:] == "]}" and self.english:
                         line = line[:-2]
                     article = json.loads(line)  # every intermediate line ends with ",", last line ends with "]}"
                     article = self.parse_article(article)
@@ -440,9 +445,12 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
                     continue
 
     def parse_article(self, article):
-        article["positives"] = self.le.transform(self.label_to_id(article[self.LABELS]))
+        if self.english:
+            article["positives"] = self.le.transform(self.label_to_id(article[self.LABELS_KEY]))
+        else:
+            article["positives"] = self.le.transform(article[self.LABELS_KEY])
         article["extra_positive_edges"] = self.get_extra_positive_edges(
-            article[self.LABELS]
+            article[self.LABELS_KEY]
         )
         article["positives"] = self.prune_positives_v2(article["positives"], ancestor_set=article["extra_positive_edges"])
         if self.train:
@@ -625,4 +633,11 @@ if __name__ == "__main__":
     # bioasq_test_iter = iter(bioasq_test)
     # print(next(bioasq_test_iter))
 
-    convert_decs_obo_to_parent_child_format()
+    # convert_decs_obo_to_parent_child_format()
+
+    mesinesp = BioASQInstanceLabelsIterDataset(file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/Subtrack1-Scientific_Literature/Train/training_set_subtrack1_all.json",
+                                                  parent_child_mapping_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt",
+                                                  name_id_mapping_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.tsv",
+                                                  english=False)
+    mesinesp_iter = iter(mesinesp)
+    print(next(mesinesp_iter))
