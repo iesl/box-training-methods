@@ -54,9 +54,24 @@ def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccal
     return edges, le
 
 
-def name_id_mapping_from_file(name_id_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt") -> Dict:
+def name_id_mapping_from_file(name_id_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt",
+                              english=True) -> Dict:
+    if english:
+        SEP = "="
+    else: # MESINESP
+        SEP = "\t"
     with open(name_id_file, "r") as f:
-        name_id = {line.split("=")[0].strip(): line.split("=")[1].strip() for line in f}
+        lines = f.readlines()
+
+    name_id = dict()
+    for i, line in enumerate(lines):
+        if i == 0 and not english:
+            continue
+        try:
+            name_id[line.split(SEP)[0].strip()] = line.split(SEP)[1].strip()
+        except IndexError:
+            breakpoint()
+
     id_name = {i:n for n,i in name_id.items()}
     return name_id, id_name
 
@@ -305,18 +320,28 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     huggingface_encoder: str = "microsoft/biogpt"
     negative_ratio: int = 500
 
+    english: bool = True  # True means English BioASQ Task A, False means Spanish MESINESP
+
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
         self.edges, self.le = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path, mesh=True
         )
         self.name_id, self.id_name = name_id_mapping_from_file(
-            name_id_file=self.name_id_mapping_path
+            name_id_file=self.name_id_mapping_path, english=self.english            
         )
         self.G = nx.DiGraph(
             self.edges[:, [1, 0]].tolist()
         )  # reverse to parent-child format for DiGraph
         logger.warning(f"num_nodes: {len(self.G.nodes())}")
+
+        if self.english:
+            self.ID = "pmid"
+            self.LABELS = "meshMajor"
+        else:  # MESINESP
+            self.ID = "id"
+            self.LABELS = "decsCodes"
+
         self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
@@ -415,9 +440,9 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
                     continue
 
     def parse_article(self, article):
-        article["positives"] = self.le.transform(self.label_to_id(article["meshMajor"]))
+        article["positives"] = self.le.transform(self.label_to_id(article[self.LABELS]))
         article["extra_positive_edges"] = self.get_extra_positive_edges(
-            article["meshMajor"]
+            article[self.LABELS]
         )
         article["positives"] = self.prune_positives_v2(article["positives"], ancestor_set=article["extra_positive_edges"])
         if self.train:
@@ -592,7 +617,7 @@ def convert_decs_obo_to_parent_child_format(decs_obo_fp="/work/pi_mccallum_umass
             parent_child_mapping.append((parent, child))
 
     with open(output_parent_child_fp, "w") as f:
-        f.write("\n".join(["\t".join(l) for l in parent_child_mapping]))
+        f.write("\n".join([" ".join(l) for l in parent_child_mapping]))
 
 
 if __name__ == "__main__":

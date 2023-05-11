@@ -166,31 +166,47 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
 def setup_mesh_training_data(device: Union[str, torch.device], eval_only: bool = False, **config):
 
     bioasq_path = Path(config["data_path"])
+    if "bioasq_train_path" in config:
+        bioasq_train_path = Path(config["bioasq_train_path"])
+    else:
+        bioasq_train_path = bioasq_path / "train.jsonl"
+    if "bioasq_dev_path" in config:
+        bioasq_dev_path = Path(config["bioasq_dev_path"])
+    else:
+        bioasq_train_path = bioasq_path / "train.jsonl"
+    if "bioasq_test_path" in config:
+        bioasq_test_path = Path(config["bioasq_test_path"])
+    else:
+        bioasq_test_path = bioasq_path / "test.jsonl"
+
     mesh_parent_child_path = Path(config["mesh_parent_child_mapping_path"])
     mesh_name_id_path = Path(config["mesh_name_id_mapping_path"])
 
     if not eval_only:
         train_dataset = BioASQInstanceLabelsIterDataset(
-            file_path=bioasq_path / "train.jsonl",
+            file_path=bioasq_train_path,
             parent_child_mapping_path=mesh_parent_child_path,
             name_id_mapping_path=mesh_name_id_path,
             huggingface_encoder=config["bioasq_huggingface_encoder"],
             train=True,
+            english=config["bioasq_english"],
         )
 
     validation_dataset = BioASQInstanceLabelsIterDataset(
-        file_path=bioasq_path / "dev.jsonl",
+        file_path=bioasq_dev_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
         train=False,
+        english=config["bioasq_english"],
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
-        file_path=bioasq_path / "test.jsonl",
+        file_path=bioasq_test_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
         train=False,
+        english=config["bioasq_english"],
     )
 
     if not eval_only:

@@ -44,6 +44,24 @@ class IntOrPercent(click.ParamType):
     required=True,
 )
 @click.option(
+    "--bioasq_train_path",
+    type=click.Path(),
+    help="path to bioasq train json",
+    required=False,
+)
+@click.option(
+    "--bioasq_dev_path",
+    type=click.Path(),
+    help="path to bioasq dev json",
+    required=False,
+)
+@click.option(
+    "--bioasq_test_path",
+    type=click.Path(),
+    help="path to bioasq test json",
+    required=False,
+)
+@click.option(
     "--mesh_parent_child_mapping_path",
     type=click.Path(),
     help="parent-child mapping text file, e.g. 'MeSH_parent_child_mapping_2020.txt'",
@@ -52,6 +70,12 @@ class IntOrPercent(click.ParamType):
     "--mesh_name_id_mapping_path",
     type=click.Path(),
     help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
+)
+@click.option(
+    "--bioasq_english",
+    type=bool,
+    default = True,
+    help="if True we're doing English BioASQ Task A, if False we're doing Spanish MESINESP",
 )
 @click.option(
     "--bioasq_huggingface_encoder",
