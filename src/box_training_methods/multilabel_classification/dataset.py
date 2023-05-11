@@ -33,21 +33,22 @@ __all__ = [
 ]
 
 
-def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", mesh=False) -> Tuple[LongTensor, LabelEncoder]:
+def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", 
+                                   input_child_parent=False,
+                                   output_child_parent=False) -> Tuple[LongTensor, LabelEncoder]:
     """
     Loads edges from a given tsv file into a PyTorch LongTensor.
     Meant for importing data where each edge appears as a line in the file, with
-        <child_id>\t<parent_id>\t{}
-
+        <child_id>\t<parent_id>\t{} if input_child_parent is True
+        <parent_id>\t<child_id>\t{} if input_child_parent is False
     :param edge_file: Path of dataset's hierarchy{_tc}.edge_list
-    :param mesh: implies <parent_id>\t<child_id>, as for "MeSH_parent_child_mapping_2020.txt"
     :returns: PyTorch LongTensor of edges with shape (num_edges, 2), LabelEncoder that numerized labels
     """
     start = time()
     logger.info(f"Loading edges from {edge_file}...")
     edges = pd.read_csv(edge_file, sep=" ", header=None).to_numpy()[:, :2]  # ignore line-final "{}"
-    if mesh:
-        edges[:, [0, 1]] = edges[:, [1, 0]]  # (parent, child) -> (child, parent)
+    if input_child_parent != output_child_parent:
+        edges[:, [0, 1]] = edges[:, [1, 0]]  # reverse parent-child to child-parent (or vice versa)
     le = LabelEncoder()
     edges = torch.tensor(le.fit_transform(edges.flatten()).reshape((-1,2)))
     logger.info(f"Loading complete, took {time() - start:0.1f} seconds")
@@ -325,14 +326,16 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
         self.edges, self.le = edges_from_hierarchy_edge_list(
-            edge_file=self.parent_child_mapping_path, mesh=True
+            edge_file=self.parent_child_mapping_path,
+            input_child_parent=False,
+            output_child_parent=False,
         )
         self.name_id, self.id_name = name_id_mapping_from_file(
             name_id_file=self.name_id_mapping_path, english=self.english            
         )
         self.G = nx.DiGraph(
-            self.edges[:, [1, 0]].tolist()
-        )  # reverse to parent-child format for DiGraph
+            self.edges.tolist()
+        )  # parent-child format for DiGraph
         logger.warning(f"num_nodes: {len(self.G.nodes())}")
 
         if self.english:

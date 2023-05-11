@@ -104,7 +104,9 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     hierarchy_edge_list_file = data_dir / "hierarchy.edgelist"
 
     # 1. read label taxonomy into GraphDataset
-    taxonomy_edges, label_encoder = edges_from_hierarchy_edge_list(edge_file=hierarchy_edge_list_file)
+    taxonomy_edges, label_encoder = edges_from_hierarchy_edge_list(edge_file=hierarchy_edge_list_file,
+                                                                   input_child_parent=True,
+                                                                   output_child_parent=True)  # (child, parent) format for GraphDataset
     label_set = label_encoder.classes_
     num_labels = len(label_set)
 
@@ -187,6 +189,8 @@ def setup_mesh_training_data(device: Union[str, torch.device], eval_only: bool =
             file_path=bioasq_train_path,
             parent_child_mapping_path=mesh_parent_child_path,
             name_id_mapping_path=mesh_name_id_path,
+            ancestors_cache_path=,
+            negatives_cache_path=,
             huggingface_encoder=config["bioasq_huggingface_encoder"],
             train=True,
             english=config["bioasq_english"],
@@ -196,6 +200,8 @@ def setup_mesh_training_data(device: Union[str, torch.device], eval_only: bool =
         file_path=bioasq_dev_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        ancestors_cache_path=,
+        negatives_cache_path=,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
         train=False,
         english=config["bioasq_english"],
@@ -204,6 +210,8 @@ def setup_mesh_training_data(device: Union[str, torch.device], eval_only: bool =
         file_path=bioasq_test_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        ancestors_cache_path=,
+        negatives_cache_path=,
         huggingface_encoder=config["bioasq_huggingface_encoder"],
         train=False,
         english=config["bioasq_english"],

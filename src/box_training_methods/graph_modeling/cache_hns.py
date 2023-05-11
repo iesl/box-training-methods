@@ -44,7 +44,9 @@ def traverse_and_cache_hns(graphs_dir, graph_types=['balanced_tree', 'nested_chi
 
 def mesh_cache_hns():
 
-    mesh_edges, _ = edges_from_hierarchy_edge_list(edge_file="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", mesh=True)
+    mesh_edges, _ = edges_from_hierarchy_edge_list(edge_file="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", 
+                                                   input_child_parent=False,
+                                                   output_child_parent=False)  # (parent, child) format for HierarchicalNegativeEdges
     
     HNE = HierarchicalNegativeEdges(
         edges=mesh_edges,
@@ -62,7 +64,24 @@ def mesh_cache_hns():
     #     pickle.dump(node_to_num_descendants, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def decs_cache_hns():
+
+    mesh_edges, _ = edges_from_hierarchy_edge_list(edge_file="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt",
+                                                    input_child_parent=False,
+                                                    output_child_parent=False)  # (parent, child) format for HierarchicalNegativeEdges
+
+    HNE = HierarchicalNegativeEdges(
+        edges=mesh_edges,
+        negative_ratio=1,  # doesn't matter for caching
+        sampling_strategy="exact",
+    )
+
+    HNE.cache_negatives(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/negatives/")
+    HNE.cache_ancestors(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/ancestors/")
+
+
 if __name__ == '__main__':
     # traverse_and_cache_hns("/Users/brozonoyer/Desktop/IESL/box-training-methods/data/graphs")
     # traverse_and_cache_hns("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graphs13/")
     mesh_cache_hns()
+    decs_cache_hns()
