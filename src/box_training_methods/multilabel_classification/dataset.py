@@ -312,8 +312,8 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
-    ancestors_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors"
-    negatives_cache_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives"
+    ancestors_cache_dir: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors"
+    negatives_cache_dir: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives"
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
@@ -329,13 +329,13 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             edge_file=self.parent_child_mapping_path,
             input_child_parent=False,
             output_child_parent=False,
-        )
+        )  # parent-child edge format for DiGraph
         self.name_id, self.id_name = name_id_mapping_from_file(
             name_id_file=self.name_id_mapping_path, english=self.english            
         )
         self.G = nx.DiGraph(
             self.edges.tolist()
-        )  # parent-child format for DiGraph
+        )
         logger.warning(f"num_nodes: {len(self.G.nodes())}")
 
         if self.english:
@@ -405,10 +405,10 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             all_negatives = set()
             for p in positives:
                 # For each positive label, get the set of its ancestors
-                anc = self.read_set(os.path.join(self.ancestors_cache_path, f"{p}-ancestors.pkl"))
+                anc = self.read_set(os.path.join(self.ancestors_cache_dir, f"{p}-ancestors.pkl"))
                 anc.add(p)
                 all_positives = all_positives.union(anc)
-                negs = self.read_set(os.path.join(self.negatives_cache_path, f"{p}-negatives.pkl"))
+                negs = self.read_set(os.path.join(self.negatives_cache_dir, f"{p}-negatives.pkl"))
                 all_negatives = all_negatives.union(negs)
             final_negatives = all_negatives.difference(all_positives)
             final_negatives = np.array(list(final_negatives))

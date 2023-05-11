@@ -72,6 +72,16 @@ class IntOrPercent(click.ParamType):
     help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
 )
 @click.option(
+    "--ancestors_cache_dir",
+    type=click.Path(),
+    help="dir to per-node pickled ancestor sets"
+)
+@click.option(
+    "--negatives_cache_dir",
+    type=click.Path(),
+    help="dir to per-node pickled negative sets"
+)
+@click.option(
     "--bioasq_english",
     type=bool,
     default = True,
