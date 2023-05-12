@@ -219,7 +219,10 @@ def setup_training_data(device: Union[str, torch.device], **config) -> GraphData
         logger.info(f"Directory {graph} has {len(graphs)} graph files")
         selected_graph_name = random.choice(graphs)
         logger.info(f"Selected graph {selected_graph_name}")
-        config["data_path"] = str(graph / selected_graph_name)
+    else:  # passing in a specific random seed
+        selected_graph_name = graph.name[:-len(".npz")]
+        graph = graph.parent
+    config["data_path"] = str(graph / selected_graph_name)
 
     if config["undirected"] is None:
         config["undirected"] = config["model_type"] == "lorentzian"
