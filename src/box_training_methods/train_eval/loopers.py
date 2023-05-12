@@ -14,7 +14,6 @@ from scipy.sparse import coo_matrix
 from torch.nn import Module
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
-from itertools import chain
 
 from pytorch_utils.exceptions import StopLoopingException
 from pytorch_utils.loggers import Logger
@@ -244,6 +243,7 @@ class MultilabelClassificationTrainLooper:
     log_interval: Optional[Union[IntervalConditional, int]] = attr.ib(
         default=None, converter=IntervalConditional.interval_conditional_converter
     )
+    bioasq: bool = True
 
     def __attrs_post_init__(self):
         if isinstance(self.eval_loopers, GraphModelingEvalLooper) or \
@@ -258,6 +258,11 @@ class MultilabelClassificationTrainLooper:
         self.best_metrics_comparison_functions = {"Mean Loss": min}
         self.best_metrics = {}
         self.previous_best = None
+
+        if self.bioasq:
+            self.train_loop = self.bioasq_train_loop
+        else:
+            self.train_loop = self.mlc_train_loop
 
     def loop(self, epochs: int):
         try:
@@ -296,7 +301,7 @@ class MultilabelClassificationTrainLooper:
             #     predictions_coo.append(prediction_coo)
             return metrics, predictions_coo
 
-    def train_loop(self, epoch: Optional[int] = None):
+    def biaosq_train_loop(self, epoch: Optional[int] = None):
         """
         Internal loop for a single epoch of training
         :return: list of losses per batch
@@ -376,6 +381,51 @@ class MultilabelClassificationTrainLooper:
 
         end_dl_iter = time.time()
         logger.critical(f"Iterating through dl took {str(end_dl_iter - begin_dl_iter)} seconds")
+
+        breakpoint()
+
+    def mlc_train_loop(self, epoch: Optional[int] = None):
+        """
+        Internal loop for a single epoch of training
+        :return: list of losses per batch
+        """
+
+        last_time_stamp = time.time()
+        num_batch_passed = 0
+
+        logger.info(f'Start looping epoch {epoch}')
+
+        for batch in self.dl:
+
+            self.opt.zero_grad()
+
+            inputs, positives, negatives = batch
+            # logger.warning(f"inputs: {inputs['input_ids'].shape}")
+            # logger.warning(f"positives: {positives.shape}")
+            # logger.warning(f"negatives: {negatives.shape}")
+
+            input_encs = self.instance_model(inputs)
+            
+            positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
+            negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
+            positive_energy = self.box_model.scores(instance_boxes=input_encs, 
+                                                    label_boxes=positive_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)
+            negative_energy = self.box_model.scores(instance_boxes=input_encs,
+                                                    label_boxes=negative_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)
+
+            # TODO input-label scorer
+            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
+            loss = loss.sum(dim=0)
+
+            if torch.isnan(loss).any():
+                raise StopLoopingException("NaNs in loss")
+            self.running_losses.append(loss.detach().item())
+
+            loss.backward()
 
         breakpoint()
 
@@ -489,22 +539,22 @@ class GraphModelingEvalLooper:
             ~np.eye(num_nodes, dtype=bool)
         )
 
-        if save_dir is not None:
+        # if save_dir is not None:
             
-            predictions_path = os.path.join(save_dir, f'predictions.epoch-{epoch}.npy')
-            with open(predictions_path, 'wb') as f:
-                np.save(f, coo_matrix(predictions), allow_pickle=True)
-            logger.info(f"Saving predictions to: {predictions_path}")
+        #     predictions_path = os.path.join(save_dir, f'predictions.epoch-{epoch}.npy')
+        #     with open(predictions_path, 'wb') as f:
+        #         np.save(f, coo_matrix(predictions), allow_pickle=True)
+        #     logger.info(f"Saving predictions to: {predictions_path}")
 
-            prediction_scores_path = os.path.join(save_dir, f'prediction_scores.epoch-{epoch}.npy')
-            with open(prediction_scores_path, 'wb') as f:
-                np.save(f, prediction_scores, allow_pickle=True)
-            logger.info(f"Saving prediction_scores to: {prediction_scores_path}")
+        #     prediction_scores_path = os.path.join(save_dir, f'prediction_scores.epoch-{epoch}.npy')
+        #     with open(prediction_scores_path, 'wb') as f:
+        #         np.save(f, prediction_scores, allow_pickle=True)
+        #     logger.info(f"Saving prediction_scores to: {prediction_scores_path}")
             
-            metrics_path = os.path.join(save_dir, f'metrics.epoch-{epoch}.json')
-            with open(metrics_path, 'w') as f:
-                json.dump(metrics, f, indent=4, sort_keys=True)
-            logger.info(f"Saving metrics to: {metrics_path}")
+        #     metrics_path = os.path.join(save_dir, f'metrics.epoch-{epoch}.json')
+        #     with open(metrics_path, 'w') as f:
+        #         json.dump(metrics, f, indent=4, sort_keys=True)
+        #     logger.info(f"Saving metrics to: {metrics_path}")
         
         return metrics, coo_matrix(predictions)
 

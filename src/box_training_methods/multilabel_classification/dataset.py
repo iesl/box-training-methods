@@ -23,6 +23,8 @@ from sklearn.preprocessing import LabelEncoder
 
 from transformers import AutoTokenizer
 
+from box_training_methods.graph_modeling.dataset import RandomNegativeEdges, HierarchicalNegativeEdges
+
 __all__ = [
     "edges_from_hierarchy_edge_list",
     "name_id_mapping_from_file",
@@ -163,6 +165,26 @@ class ARFFReader(object):
         return data
 
 
+def collate_mlc_fn(batch):
+    inputs, positives, negatives = batch
+
+    positives = [[m for m in x["positives"]] for x in batch]
+    max_pos_len = max(map(len, positives))
+    positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
+    positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+    
+    # xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+    # max_xpos_len = max(map(len, xpositives))
+    # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+    # xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+
+    negatives = [[m for m in x["negatives"]] for x in batch]
+    max_neg_len = max(map(len, negatives))
+    negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
+    negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+
+
+
 @attr.s(auto_attribs=True)
 class InstanceLabelsDataset(Dataset):
     """
@@ -171,6 +193,7 @@ class InstanceLabelsDataset(Dataset):
     instance_feats: Tensor
     labels: Tensor
     label_encoder: LabelEncoder  # label set accessable via label_encoder.classes_
+    negative_sampler: Union[RandomNegativeEdges, HierarchicalNegativeEdges]
 
     def __attrs_post_init__(self):
 
@@ -178,22 +201,37 @@ class InstanceLabelsDataset(Dataset):
         self.instance_dim = self.instance_feats.shape[1]
         self.labels = self.prune_and_encode_labels_for_instances()
         
-        instance_label_pairs = []
-        for i, ls in enumerate(self.labels):
-            instance_label_pairs.extend([i, l] for l in ls)
-        self.instance_label_pairs = torch.tensor(instance_label_pairs)
-        
-        self.instance_feats = torch.nn.Embedding.from_pretrained(self.instance_feats, freeze=True)
+        # instance_label_pairs = []
+        # for i, ls in enumerate(self.labels):
+        #     instance_label_pairs.extend([i, l] for l in ls)
+        # self.instance_label_pairs = torch.tensor(instance_label_pairs) 
+        # self.instance_feats = torch.nn.Embedding.from_pretrained(self.instance_feats, freeze=True)
 
-    def __getitem__(self, idxs: LongTensor) -> LongTensor:
-        """
-        :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
-        :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
-        """
-        instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
-        label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
-        instance_feats = self.instance_feats(instance_idxs)
-        return instance_feats, label_idxs
+        self.negatives = []
+        for ls in self.labels:
+            self.negatives.append(self.get_negatives_for_labels(ls))
+        breakpoint()
+
+    def __getitem__(self, index: int) -> Dict:
+        feats = self.instance_feats[index]
+        labels = self.labels[index]
+        negatives = self.negatives[index]
+        ret = {
+            "feats": feats,
+            "positives": labels,
+            "negatives": negatives,
+        }
+        return ret
+
+    # def __getitem__(self, idxs: LongTensor) -> LongTensor:
+    #     """
+    #     :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
+    #     :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
+    #     """
+    #     instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
+    #     label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
+    #     instance_feats = self.instance_feats(instance_idxs)
+    #     return instance_feats, label_idxs
 
     def __len__(self):
         return len(self.labels)
@@ -217,6 +255,12 @@ class InstanceLabelsDataset(Dataset):
             if label_i_is_nobodys_parent:
                 pruned_ls.append(ls[i])
         return pruned_ls
+
+    def get_negatives_for_labels(self, ls):
+        negatives = set()
+        for l in ls:
+            negatives.update(sorted(list(set(self.negative_sampler.negative_roots[l].tolist()).difference({self.negative_sampler.EMB_PAD}))))
+        return negatives
 
     @property
     def device(self):

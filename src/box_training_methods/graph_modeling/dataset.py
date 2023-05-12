@@ -417,6 +417,7 @@ class HierarchicalNegativeEdges:
     sampling_strategy: str = "exact"  # "uniform", "descendants"
     negative_ratio: int = 16
     cache_dir: str = ""
+    cache_only: bool = False
 
     def __attrs_post_init__(self):
 
@@ -471,9 +472,10 @@ class HierarchicalNegativeEdges:
             node_to_weight = torch.cat([node_to_weight, torch.tensor([[1e-9]])], dim=0)
             self.weights = torch.nn.Embedding.from_pretrained(node_to_weight, freeze=True, padding_idx=self.EMB_PAD)
 
-        t0 = time()
-        self.negative_roots = self.precompute_negatives()
-        logger.info(f"Time to precompute negative roots: {time() - t0}")
+        if not self.cache_only:
+            t0 = time()
+            self.negative_roots = self.precompute_negatives()
+            logger.info(f"Time to precompute negative roots: {time() - t0}")
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """

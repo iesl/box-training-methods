@@ -148,7 +148,7 @@ def setup(**config):
         dev_dataloader = TensorDataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
         test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
     elif config["task"] == "bioasq":
-        train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
+        train_dataset, dev_dataset, test_dataset = task_train_eval.setup_bioasq_training_data(device, **config)
         train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn, num_workers=12)
         dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
         test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
@@ -243,6 +243,7 @@ def setup(**config):
             eval_loopers=eval_loopers,
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
+            bioasq=config["task"]=="bioasq",
         )
 
     if config["task"] == "graph_modeling":
