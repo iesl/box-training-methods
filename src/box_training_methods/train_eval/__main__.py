@@ -289,8 +289,8 @@ def train(**config):
 @click.command(context_settings=dict(show_default=True),)
 @click.option(
     "--task",
-    type=click.Choice(["bioasq"], case_sensitive=False),
-    help="task to train on, currently only necessary for BioASQ",
+    type=click.Choice(["graph_modeling", "bioasq"], case_sensitive=False),
+    help="task to evaluate on with saved model checkpoint(s), currently only necessary for BioASQ",
     required=True
 )
 @click.option(
@@ -321,6 +321,28 @@ def train(**config):
     help="path to saved instance encoder",
 )
 @click.option(
+    "--model_type",
+    type=click.Choice(
+        [
+            "tbox",
+            "vector_sim",
+        ],
+        case_sensitive=False,
+    ),
+    default="tbox",
+    help="model architecture to use",
+)
+@click.option(
+    "--vector_separate_io / --vector_no_separate_io",
+    default=True,
+    help="enable/disable using separate input/output representations for vector / bilinear vector model",
+)
+@click.option(
+    "--vector_use_bias / --vector_no_use_bias",
+    default=False,
+    help="enable/disable using bias term in vector / bilinear",
+)
+@click.option(
     "--box_model_path",
     type=str,
     help="path to saved box model",
@@ -334,6 +356,12 @@ def train(**config):
     help="enable/disable logging to Weights and Biases",
 )
 @click.option(
+    "--undirected / --directed",
+    default=None,
+    help="whether to train using an undirected or directed graph (default is model dependent)",
+    show_default=False,
+)
+@click.option(
     "--dim", type=int, default=4, help="dimension for embedding space",
 )
 @click.option(
@@ -341,6 +369,12 @@ def train(**config):
     type=int,
     default=10,
     help="batch size for training will be 2**LOG_BATCH_SIZE",
+)  # Using batch sizes which are 2**n for some integer n may help optimize GPU efficiency
+@click.option(
+    "--log_eval_batch_size",
+    type=int,
+    default=15,
+    help="batch size for eval will be 2**LOG_EVAL_BATCH_SIZE",
 )  # Using batch sizes which are 2**n for some integer n may help optimize GPU efficiency
 @click.option(
     "--box_intersection_temp",
@@ -359,6 +393,12 @@ def train(**config):
     type=click.Choice(["global", "per_dim", "per_entity", "per_entity_per_dim"]),
     default="per_entity_per_dim",
     help="type of learned temperatures (for tbox model)",
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=None,
+    help="output directory for recording current hyper-parameters and results",
 )
 def eval(**config):
     """Evaluate an embedding representation on a task with boxes"""

@@ -75,7 +75,7 @@ __all__ = [
 
 # TODO make num_nodes a kwarg
 def setup_model(
-    num_nodes: int, device: Union[str, torch.device], **config
+    num_nodes: int, device: Union[str, torch.device], eval_only: bool = False, **config
 ) -> Tuple[Module, Callable]:
     # TODO: Break this out into the model directory
     model_type = config["model_type"].lower()
@@ -86,7 +86,8 @@ def setup_model(
             volume_temp=config["box_volume_temp"],
             intersection_temp=config["box_intersection_temp"],
         )
-        loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "tbox":
         temp_type = {
             "global": GlobalTemp,
@@ -118,22 +119,26 @@ def setup_model(
                 num_entities=num_nodes,
             ),
         )
-        loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "hard_box":
         model = TBox(
             num_nodes,
             config["dim"],
             hard_box=True
         )
-        loss_func = PushApartPullTogetherLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = PushApartPullTogetherLoss(config["negative_weight"])
     elif model_type == "order_embeddings":
         model = OE(num_nodes, config["dim"])
-        loss_func = MaxMarginOENegativeSamplingLoss(
-            config["negative_weight"], config["margin"]
-        )
+        if not eval_only:
+            loss_func = MaxMarginOENegativeSamplingLoss(
+                config["negative_weight"], config["margin"]
+            )
     elif model_type == "partial_order_embeddings":
         model = POE(num_nodes, config["dim"])
-        loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "vector_sim":
         model = VectorSim(
             num_nodes,
@@ -141,12 +146,14 @@ def setup_model(
             config["vector_separate_io"],
             config["vector_use_bias"],
         )
-        loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "vector_dist":
         model = VectorDist(num_nodes, config["dim"], config["vector_separate_io"],)
-        loss_func = BCEWithDistancesNegativeSamplingLoss(
-            config["negative_weight"], config["margin"],
-        )
+        if not eval_only:
+            loss_func = BCEWithDistancesNegativeSamplingLoss(
+                config["negative_weight"], config["margin"],
+            )
     elif model_type == "bilinear_vector":
         model = BilinearVector(
             num_nodes,
@@ -154,10 +161,12 @@ def setup_model(
             config["vector_separate_io"],
             config["vector_use_bias"],
         )
-        loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "complex_vector":
         model = ComplexVector(num_nodes, config["dim"],)
-        loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
+        if not eval_only:
+            loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
     elif model_type == "lorentzian":
         model = Lorentzian(
             num_nodes,
@@ -165,8 +174,9 @@ def setup_model(
             config["lorentzian_alpha"],
             config["lorentzian_beta"],
         )
-        loss_func = BCEWithDistancesNegativeSamplingLoss(config["negative_weight"])
-        # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
+        if not eval_only:
+            loss_func = BCEWithDistancesNegativeSamplingLoss(config["negative_weight"])
+            # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
     elif model_type == "lorentzian_score":
         model = LorentzianScore(
             num_nodes,
@@ -174,8 +184,9 @@ def setup_model(
             config["lorentzian_alpha"],
             config["lorentzian_beta"],
         )
-        loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
-        # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
+        if not eval_only:
+            loss_func = BCEWithLogitsNegativeSamplingLoss(config["negative_weight"])
+            # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
     elif model_type == "lorentzian_distance":
         model = LorentzianDistance(
             num_nodes,
@@ -183,8 +194,9 @@ def setup_model(
             config["lorentzian_alpha"],
             config["lorentzian_beta"],
         )
-        loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
-        # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
+        if not eval_only:
+            loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
+            # TODO: implement multi-dimensional scaling loss (cf. Max Law paper)
     elif model_type == "hyperbolic_entailment_cones":
         model = HyperbolicEntailmentCones(
             num_nodes,
@@ -192,17 +204,23 @@ def setup_model(
             config["hyperbolic_entailment_cones_relative_cone_aperture_scale"],
             config["hyperbolic_entailment_cones_eps_bound"],
         )
-        loss_func = MaxMarginOENegativeSamplingLoss(
-            config["negative_weight"], config["margin"]
-        )
+        if not eval_only:
+            loss_func = MaxMarginOENegativeSamplingLoss(
+                config["negative_weight"], config["margin"]
+            )
     else:
         raise ValueError(f"Model type {config['model_type']} does not exist")
     model.to(device)
 
-    return model, loss_func
+    if not eval_only:
+        return model, loss_func
+    
+    model.load_state_dict(torch.load(config["box_model_path"]))
+
+    return model
 
 
-def setup_training_data(device: Union[str, torch.device], **config) -> GraphDataset:
+def setup_training_data(device: Union[str, torch.device], eval_only: bool = False, **config) -> GraphDataset:
     """
     Load the training data (either npz or tsv)
 
@@ -214,7 +232,7 @@ def setup_training_data(device: Union[str, torch.device], **config) -> GraphData
     start = time()
 
     graph = Path(config["data_path"])
-    if graph.is_dir():
+    if graph.is_dir() and not eval_only:
         graphs = list({file.stem for file in graph.glob("*.npz")})
         logger.info(f"Directory {graph} has {len(graphs)} graph files")
         selected_graph_name = random.choice(graphs)
@@ -258,23 +276,26 @@ def setup_training_data(device: Union[str, torch.device], **config) -> GraphData
         else:
             avoid_edges = torch.cat((training_edges, diag))
 
-    if config["negative_sampler"] == "random":
-        negative_sampler = RandomNegativeEdges(
-            num_nodes=num_nodes,
-            negative_ratio=config["negative_ratio"],
-            avoid_edges=avoid_edges,
-            device=device,
-            permutation_option=config["negatives_permutation_option"],
-        )
-    elif config["negative_sampler"] == "hierarchical":
-        negative_sampler = HierarchicalNegativeEdges(
-            edges=training_edges,
-            negative_ratio=config["negative_ratio"],
-            sampling_strategy=config["hierarchical_negative_sampling_strategy"],
-            cache_dir=config["data_path"] + ".hns",
-        )
+    if not eval_only:
+        if config["negative_sampler"] == "random":
+            negative_sampler = RandomNegativeEdges(
+                num_nodes=num_nodes,
+                negative_ratio=config["negative_ratio"],
+                avoid_edges=avoid_edges,
+                device=device,
+                permutation_option=config["negatives_permutation_option"],
+            )
+        elif config["negative_sampler"] == "hierarchical":
+            negative_sampler = HierarchicalNegativeEdges(
+                edges=training_edges,
+                negative_ratio=config["negative_ratio"],
+                sampling_strategy=config["hierarchical_negative_sampling_strategy"],
+                cache_dir=config["data_path"] + ".hns",
+            )
+        else:
+            raise NotImplementedError
     else:
-        raise NotImplementedError
+        negative_sampler = None
 
     dataset = GraphDataset(
         training_edges, num_nodes=num_nodes, negative_sampler=negative_sampler

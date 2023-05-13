@@ -18,7 +18,7 @@ from wandb_utils.loggers import WandBLogger
 
 from pytorch_utils import TensorDataLoader, cuda_if_available
 from pytorch_utils.training import EarlyStopping, ModelCheckpoint
-from .loopers import MultilabelClassificationEvalLooper
+from .loopers import GraphModelingEvalLooper, MultilabelClassificationEvalLooper
 from box_training_methods import metric_logger
 
 
@@ -67,36 +67,60 @@ def setup(**config):
     :return: Tuple of dataset collection, dataloader collection, model, and train looper
     """
 
-    from box_training_methods.multilabel_classification import train_eval as task_train_eval
+    if config["task"] == "graph_modeling":
+        from box_training_methods.graph_modeling import train_eval as task_train_eval
+    elif config["task"] in {"bioasq"}:
+        from box_training_methods.multilabel_classification import train_eval as task_train_eval
 
     device = cuda_if_available(use_cuda=config["cuda"])
 
-    dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, eval_only=True, **config)
-    dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)#, num_workers=12)
-    test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)#, num_workers=12)
+    if config["task"] == "graph_modeling":
+        dataset = task_train_eval.setup_training_data(device, eval_only=True, **config)
+        dataloader =  TensorDataLoader(dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
+        model = task_train_eval.setup_model(dataset.num_nodes, device=device, eval_only=True, **config)
+    elif config["task"] == "bioasq":
+        dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, eval_only=True, **config)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)#, num_workers=12)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)#, num_workers=12)
 
-    num_labels = len(dev_dataset.le.classes_)
-    instance_dim = -1  # FIXME this doesn't matter for bioasq where dim is automatically determined
-    box_model, instance_encoder = task_train_eval.setup_model(num_labels, instance_dim, device, eval_only=True, **config)
+        num_labels = len(dev_dataset.le.classes_)
+        instance_dim = -1  # FIXME this doesn't matter for bioasq where dim is automatically determined
+        box_model, instance_encoder = task_train_eval.setup_model(num_labels, instance_dim, device, eval_only=True, **config)
 
     # set Eval Looper
     eval_loopers = []
-    eval_loopers.extend([
-        MultilabelClassificationEvalLooper(
-            name="Validation",
-            box_model=box_model,
-            instance_model=instance_encoder,
-            dl=dev_dataloader,
-            batchsize=2 ** config["log_batch_size"],
-        ),
-        MultilabelClassificationEvalLooper(
-            name="Test",
-            box_model=box_model,
-            instance_model=instance_encoder,
-            dl=test_dataloader,
-            batchsize=2 ** config["log_batch_size"],
+    if config["task"] == "graph_modeling":
+        logger.debug(f"Will evaluate on full adjacency matrix")
+        eval_loopers.append(
+            GraphModelingEvalLooper(
+                name="Eval",
+                model=model,
+                dl=dataloader,
+                batchsize=2 ** config["log_eval_batch_size"],
+                output_dir=config["output_dir"],
+            )
         )
-    ])
+    elif config["task"] == "bioasq":
+        eval_loopers.extend([
+            MultilabelClassificationEvalLooper(
+                name="Validation",
+                box_model=box_model,
+                instance_model=instance_encoder,
+                dl=dev_dataloader,
+                batchsize=2 ** config["log_batch_size"],
+            ),
+            MultilabelClassificationEvalLooper(
+                name="Test",
+                box_model=box_model,
+                instance_model=instance_encoder,
+                dl=test_dataloader,
+                batchsize=2 ** config["log_batch_size"],
+            )
+        ])
 
-    models = (box_model, instance_encoder)
+    if config["task"] == "graph_modeling":
+        models= (model,)
+    elif config["task"] == "bioasq":
+        models = (box_model, instance_encoder)
+    
     return models, eval_loopers

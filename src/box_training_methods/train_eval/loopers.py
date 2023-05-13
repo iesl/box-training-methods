@@ -136,7 +136,10 @@ class GraphModelingTrainLooper:
                 negative_padding_mask = negative_padding_mask[..., 0].float()   # deduplicate
 
             batch_out = self.model(batch_in)
-            loss = self.loss_func(batch_out, negative_padding_mask=negative_padding_mask)
+            if negative_padding_mask is not None:
+                loss = self.loss_func(batch_out, negative_padding_mask=negative_padding_mask)
+            else:
+                loss = self.loss_func(batch_out)
 
             # This is not always going to be the right thing to check.
             # In a more general setting, we might want to consider wrapping the DataLoader in some way
