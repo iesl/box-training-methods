@@ -19,7 +19,7 @@ from torch.nn.utils.rnn import pack_sequence, pad_packed_sequence
 import networkx as nx
 #from scipy.sparse._csr import csr_matrix
 
-from ..enums import PermutationOption
+from box_training_methods.enums import PermutationOption
 
 __all__ = [
     "node_counts",
@@ -550,20 +550,36 @@ class HierarchicalNegativeEdges:
 
         return negative_roots
 
+    ## CONTAINS REDUNDANT COMPUTATIONS
+    # def precompute_negatives_for_node(self, node):
+    # 
+    #     node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})
+    #     descendants_of_node = set(self.A_[torch.tensor([node])].nonzero()[1])
+    #     children_of_node = set(self.A[torch.tensor([node])].nonzero()[1])
+    #     positives = node_and_ancestors.union(descendants_of_node)
+    #     negatives = self.nodes.difference(positives).union(children_of_node)
+    # 
+    #     # mask out the positives from TC-adjacency-matrix
+    #     A__ = self.A_.copy()
+    #     A__[torch.tensor(list(positives))] = 0
+    # 
+    #     # remove the non-roots (i.e. non-zero column indices) from the negatives
+    #     negative_roots = negatives.difference(set(A__.nonzero()[1]))
+    #
+    #     return sorted(list(negative_roots))
+
     def precompute_negatives_for_node(self, node):
 
         node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})
-        descendants_of_node = set(self.A_[torch.tensor([node])].nonzero()[1])
-        children_of_node = set(self.A[torch.tensor([node])].nonzero()[1])
-        positives = node_and_ancestors.union(descendants_of_node)
-        negatives = self.nodes.difference(positives).union(children_of_node)
+        negatives = self.nodes.difference(node_and_ancestors)
 
         # mask out the positives from TC-adjacency-matrix
         A__ = self.A_.copy()
-        A__[torch.tensor(list(positives))] = 0
+        A__[torch.tensor(list(node_and_ancestors))] = 0
 
-        # remove the non-roots (i.e. non-zero column indices) from the negatives
-        negative_roots = negatives.difference(set(A__.nonzero()[1]))
+        # remove the non-roots (i.e. non-zero column indices)
+        negative_non_roots = set(A__.nonzero()[1])
+        negative_roots = negatives.difference(negative_non_roots)
 
         return sorted(list(negative_roots))
 
@@ -637,3 +653,27 @@ class GraphDataset(Dataset):
         self._device = device
         self.edges = self.edges.to(device)
         return self
+
+
+if __name__ == "__main__":
+
+    edges = [(0,1), (0,2), (1,3), (1,4), (2,5), (2,6), (3,7), (4,7), (4,8), (5,8)]
+
+    G = nx.DiGraph()
+    G.add_edges_from(edges)
+    HNE = HierarchicalNegativeEdges(
+        edges=torch.tensor(list(G.edges)),
+    )
+
+    G_tr = nx.transitive_reduction(G)
+    HNE_tr = HierarchicalNegativeEdges(
+        edges=torch.tensor(list(G_tr.edges)),
+    )
+
+    G_tc = nx.transitive_reduction(G)
+    HNE_tc = HierarchicalNegativeEdges(
+        edges=torch.tensor(list(G_tc.edges)),
+    )
+
+    assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)
+    assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
