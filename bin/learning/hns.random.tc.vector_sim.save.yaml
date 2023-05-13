@@ -1,4 +1,4 @@
-name: hns.random.tc.all_seeds.save
+name: hns.random.tc.vector_sim.all_seeds.save
 program: scripts/box-training-methods
 command:
   - ${env}
@@ -8,10 +8,9 @@ command:
   - ${args}
   - --task=graph_modeling
   - --seed=12345
-  - --model_type=tbox
-  - --tbox_temperature_type=global
-  - --box_intersection_temp=0.01
-  - --box_volume_temp=1.0
+  - --model_type=vector_sim
+  - --vector_separate_io
+  - --vector_no_use_bias
   - --log_interval=0.2
   - --patience=11
   - --log_batch_size=9
