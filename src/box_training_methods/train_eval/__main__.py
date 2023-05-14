@@ -129,6 +129,13 @@ class IntOrPercent(click.ParamType):
     show_default=False,
 )
 @click.option(
+    "--sample_positive_edges_from_tc_or_tr",
+    default=None,
+    required=False,
+    type=click.Choice(["tc", "tr"], case_sensitive=False),
+    help="whether to sample positives from transitive closure, transitive reduction, or original graph"
+)
+@click.option(
     "--dim", type=int, default=4, help="dimension for embedding space",
 )
 @click.option(

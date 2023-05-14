@@ -28,6 +28,8 @@ metric:
   goal: maximize
   name: '[Eval] F1'
 parameters:
+  sample_positive_edges_from_tc_or_tr:
+    values: ["tc", "tr"]
   hierarchical_negative_sampling_strategy:
     values: ['uniform', 'descendants']
   data_path:

@@ -567,7 +567,7 @@ class HierarchicalNegativeEdges:
     #     negative_roots = negatives.difference(set(A__.nonzero()[1]))
     #
     #     return sorted(list(negative_roots))
-
+    
     def precompute_negatives_for_node(self, node):
 
         node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})

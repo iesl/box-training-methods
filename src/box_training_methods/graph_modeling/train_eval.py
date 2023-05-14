@@ -5,6 +5,7 @@ from typing import *
 
 import attr
 import numpy as np
+import networkx as nx
 import torch
 from loguru import logger
 from scipy.sparse import coo_matrix
@@ -265,7 +266,13 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         raise ValueError(
             f"Could not locate training file at {config['data_path']}{{.npz,.tsv}}"
         )
+
+    if config["sample_positive_edges_from_tc_or_tr"].lower() == "tr":
+        training_edges = torch.tensor(list(nx.transitive_reduction(nx.DiGraph(training_edges)).edges))
+    elif config["sample_positive_edges_from_tc_or_tr"].lower() == "tc":
+        training_edges = torch.tensor(list(nx.transitive_closure(nx.DiGraph(training_edges)).edges))
     training_edges = training_edges.to(device)
+
     if config["undirected"]:
         training_edges = torch.unique(torch.sort(training_edges, dim=-1).values, dim=0)
     if avoid_edges is None:
@@ -273,8 +280,10 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         if config["undirected"]:
             # The following is not particularly memory efficient, but should serve our purpose
             avoid_edges = torch.cat((training_edges, training_edges[..., [1, 0]], diag))
+            # TODO implement transitive closure of training_edges to be avoid_edges for undirected as well as directed
         else:
-            avoid_edges = torch.cat((training_edges, diag))
+            training_edges_tc = torch.tensor(list(nx.transitive_closure(nx.DiGraph(training_edges)).edges), device=device)
+            avoid_edges = torch.cat((training_edges_tc, diag))
 
     if not eval_only:
         if config["negative_sampler"] == "random":
