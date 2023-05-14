@@ -44,7 +44,7 @@ Example **training** command:
 ```
 box_training_methods train --task graph_modeling \
 --data_path ./data/graphs13/balanced_tree/branching\=10-log_num_nodes\=13-transitive_closure\=True/ \
---model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy exact
+--model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy uniform
 ```
 
 Example **eval** command (make sure the model hyperparams are the same as the ones the checkpoint was trained on):
@@ -74,6 +74,18 @@ box_training_methods train --task bioasq \
 --mesh_parent_child_mapping_path ./data/mesh/MeSH_parent_child_mapping_2020.txt \
 --mesh_name_id_mapping_path ./data/mesh/MeSH_name_id_mapping_2020.txt \
 --model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy exact
+```
+
+Example **eval** command:
+```
+/usr/bin/env python scripts/box-training-methods eval \
+--task bioasq \
+--data_path ./data/mesh/ \
+--mesh_parent_child_mapping_path ./data/mesh/MeSH_parent_child_mapping_2020.txt \
+--mesh_name_id_mapping_path ./data/mesh/MeSH_name_id_mapping_2020.txt \
+--bioasq_huggingface_encoder nlpie/bio-distilbert-uncased \
+--instance_encoder_path /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models/embeddings.epoch-0.step-10.pt \
+--box_model_path /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models/tbox.epoch-0.step-10.pt
 ```
 
 ## Citations
