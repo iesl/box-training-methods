@@ -1,4 +1,4 @@
-name: hns.hierarchical.sampled.tc.vector_sim.all_seeds.save
+name: hns.random.tbox
 program: scripts/box-training-methods
 command:
   - ${env}
@@ -8,9 +8,10 @@ command:
   - ${args}
   - --task=graph_modeling
   - --seed=12345
-  - --model_type=vector_sim
-  - --vector_separate_io
-  - --vector_no_use_bias
+  - --model_type=tbox
+  - --tbox_temperature_type=global
+  - --box_intersection_temp=0.01
+  - --box_volume_temp=1.0
   - --log_interval=0.2
   - --patience=11
   - --log_batch_size=9
@@ -18,7 +19,7 @@ command:
   - --epochs=25
   - --dim=128
   - --negative_ratio=4
-  - --negative_sampler=hierarchical
+  - --negative_sampler=random
   - --negative_weight=0.9
   - --learning_rate=0.2
   - --wandb
@@ -29,8 +30,6 @@ metric:
 parameters:
   sample_positive_edges_from_tc_or_tr:
     values: ["tc", "tr"]
-  hierarchical_negative_sampling_strategy:
-    values: ['uniform', 'descendants']
   data_path:
     values: [
       'data/graphs13/balanced_tree/branching=3-log_num_nodes=13-transitive_closure=True/1439248948.npz',
