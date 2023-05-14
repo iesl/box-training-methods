@@ -1,4 +1,4 @@
-name: hns.hierarchical.sampled.vector_sim
+name: hans.hierarchical.sampled.vector_sim
 program: scripts/box-training-methods
 command:
   - ${env}
@@ -12,7 +12,7 @@ command:
   - --vector_separate_io
   - --vector_no_use_bias
   - --log_interval=0.2
-  - --patience=11
+  - --patience=9999999
   - --log_batch_size=9
   - --log_eval_batch_size=17
   - --epochs=25
