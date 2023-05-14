@@ -38,19 +38,34 @@ You can then run `make all` to install the remaining modules and their dependenc
 
 This module provides a command line interface available with `box_training_methods`.
 
-Example command for `graph_modeling` task:
+### Graph Modeling
+
+Example **training** command:
 ```
 box_training_methods train --task graph_modeling \
 --data_path ./data/graphs13/balanced_tree/branching\=10-log_num_nodes\=13-transitive_closure\=True/ \
 --model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy exact
 ```
 
-Example command for `multilabel_classification` task, which includes the MLC datasets used in [Patel et al. 2022](https://par.nsf.gov/servlets/purl/10392233)
+Example **eval** command (make sure the model hyperparams are the same as the ones the checkpoint was trained on):
+```
+/usr/bin/env python scripts/box-training-methods eval \
+--data_path=data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True/9.npz \
+--task=graph_modeling \
+--model_type=tbox --tbox_temperature_type=global --box_intersection_temp=0.01 --box_volume_temp=1.0 --log_eval_batch_size=17 --dim=128 \
+--box_model_path /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/wandb/run-20230514_012634-zpbp23bk/files/learned_model.epoch-16.pt
+```
+
+### Multilabel Classification (non-BioASQ)
+
+Example **train** command for `multilabel_classification` task, which includes the MLC datasets used in [Patel et al. 2022](https://par.nsf.gov/servlets/purl/10392233)
 ```
 box_training_methods train --task multilabel_classification \
 --data_path ./data/box-mlc-iclr-2022-data/expr_FUN/ \
 --model_type hard_box --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy exact
 ```
+
+### BioASQ
 
 Example command for `bioasq` task (BioASQ Task A):
 ```
