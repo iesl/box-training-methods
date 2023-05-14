@@ -62,7 +62,9 @@ class BCEWithLogsNegativeSamplingLossMLC(Module):
         super().__init__()
         self.negative_weight = negative_weight
 
-    def forward(self, log_prob_pos: Tensor, log_prob_neg, negative_padding_mask: Union[None, Tensor] = None) -> Tensor:
+    def forward(self, log_prob_pos: Tensor, log_prob_neg, 
+                positive_padding_mask: Union[None, Tensor] = None, 
+                negative_padding_mask: Union[None, Tensor] = None) -> Tensor:
         """
         Returns a weighted BCE loss where:
             (1 - negative_weight) * weighted_average(pos_loss) + negative_weight * weighted_average(neg_loss)
@@ -78,9 +80,15 @@ class BCEWithLogsNegativeSamplingLossMLC(Module):
         neg_loss = -log1mexp(log_prob_neg)
         logit_prob_neg = log_prob_neg + neg_loss
 
+        # mask out padding positive edges before applying softmax
+        if positive_padding_mask is not None:
+            logit_prob_pos[positive_padding_mask == 0] = -torch.inf
         pos_weights = F.softmax(logit_prob_pos, dim=-1)
         weighted_average_pos_loss = (pos_weights * pos_loss).sum(dim=-1)
 
+        # mask out padding negative edges before applying softmax
+        if negative_padding_mask is not None:
+            logit_prob_neg[negative_padding_mask == 0] = -torch.inf
         neg_weights = F.softmax(logit_prob_neg, dim=-1)
         weighted_average_neg_loss = (neg_weights * neg_loss).sum(dim=-1)
 

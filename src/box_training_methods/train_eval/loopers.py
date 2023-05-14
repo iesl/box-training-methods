@@ -277,10 +277,10 @@ class MultilabelClassificationTrainLooper:
                 with torch.enable_grad():
                     self.train_loop(epoch)
 
-                    # evaluate after each epoch
-                    for eval_looper in self.eval_loopers:
-                        if eval_looper.name == "Validation":
-                            eval_looper.loop()
+                    # # evaluate after each epoch
+                    # for eval_looper in self.eval_loopers:
+                    #     if eval_looper.name == "Validation":
+                    #         eval_looper.loop()
 
         except StopLoopingException as e:
             logger.warning(str(e))
@@ -368,6 +368,9 @@ class MultilabelClassificationTrainLooper:
                 end_loss_back = time.time()
                 logger.critical(f"Loss and backward took {end_loss_back - begin_loss_back} seconds")
 
+                num_batch_passed += 1
+                self.opt.step()
+
                 end_batch = time.time()
 
                 batch_delta = end_batch - begin_batch
@@ -396,6 +399,7 @@ class MultilabelClassificationTrainLooper:
 
         last_time_stamp = time.time()
         num_batch_passed = 0
+        losses_for_epoch = []
 
         logger.info(f'Start looping epoch {epoch}')
 
@@ -403,35 +407,36 @@ class MultilabelClassificationTrainLooper:
 
             self.opt.zero_grad()
 
-            inputs, positives, negatives = batch
-            # logger.warning(f"inputs: {inputs['input_ids'].shape}")
-            # logger.warning(f"positives: {positives.shape}")
-            # logger.warning(f"negatives: {negatives.shape}")
-
-            input_encs = self.instance_model(inputs)
+            feats, positives, positives_pad_mask, negatives, negatives_pad_mask = batch
+            
+            feat_encs = self.instance_model(feats)
             
             positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
             negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
-            positive_energy = self.box_model.scores(instance_boxes=input_encs, 
+            positive_energy = self.box_model.scores(instance_boxes=feat_encs, 
                                                     label_boxes=positive_boxes, 
                                                     intersection_temp=0.01, 
                                                     volume_temp=1.0)
-            negative_energy = self.box_model.scores(instance_boxes=input_encs,
+            negative_energy = self.box_model.scores(instance_boxes=feat_encs,
                                                     label_boxes=negative_boxes, 
                                                     intersection_temp=0.01, 
                                                     volume_temp=1.0)
 
             # TODO input-label scorer
-            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
+            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy, positive_padding_mask=positives_pad_mask, negative_padding_mask=negatives_pad_mask)
             loss = loss.sum(dim=0)
 
             if torch.isnan(loss).any():
                 raise StopLoopingException("NaNs in loss")
             self.running_losses.append(loss.detach().item())
 
+            losses_for_epoch.append(loss.detach().item())
             loss.backward()
 
-        breakpoint()
+            num_batch_passed += 1
+            self.opt.step()
+
+        logger.critical(f"Average loss for epoch {epoch}: {sum(losses_for_epoch)/len(losses_for_epoch)}")
 
     def update_best_metrics_(self, metrics: Dict[str, float]) -> None:
         for name, comparison in self.best_metrics_comparison_functions.items():

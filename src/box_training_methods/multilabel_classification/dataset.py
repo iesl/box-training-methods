@@ -166,13 +166,17 @@ class ARFFReader(object):
 
 
 def collate_mlc_fn(batch):
-    inputs, positives, negatives = batch
+
+    feats = torch.stack([x["feats"] for x in batch])
 
     positives = [[m for m in x["positives"]] for x in batch]
     max_pos_len = max(map(len, positives))
-    positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
+    positives = [p + [-1] * (max_pos_len - len(p)) for p in positives]
     positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
-    
+    positives_pad_mask = torch.clone(positives)
+    positives_pad_mask[positives_pad_mask != -1] = 1
+    positives_pad_mask[positives_pad_mask == -1] = 0
+
     # xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
     # max_xpos_len = max(map(len, xpositives))
     # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
@@ -180,9 +184,13 @@ def collate_mlc_fn(batch):
 
     negatives = [[m for m in x["negatives"]] for x in batch]
     max_neg_len = max(map(len, negatives))
-    negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
+    negatives = [n + [-1] * (max_neg_len - len(n)) for n in negatives]
     negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+    negatives_pad_mask = torch.clone(negatives)
+    negatives_pad_mask[negatives_pad_mask != -1] = 1
+    negatives_pad_mask[negatives_pad_mask == -1] = 0
 
+    return feats, positives, positives_pad_mask, negatives, negatives_pad_mask
 
 
 @attr.s(auto_attribs=True)
@@ -194,6 +202,7 @@ class InstanceLabelsDataset(Dataset):
     labels: Tensor
     label_encoder: LabelEncoder  # label set accessable via label_encoder.classes_
     negative_sampler: Union[RandomNegativeEdges, HierarchicalNegativeEdges]
+    collate_fn: Callable = collate_mlc_fn
 
     def __attrs_post_init__(self):
 
@@ -210,7 +219,6 @@ class InstanceLabelsDataset(Dataset):
         self.negatives = []
         for ls in self.labels:
             self.negatives.append(self.get_negatives_for_labels(ls))
-        breakpoint()
 
     def __getitem__(self, index: int) -> Dict:
         feats = self.instance_feats[index]
@@ -223,6 +231,7 @@ class InstanceLabelsDataset(Dataset):
         }
         return ret
 
+    ## ORIGINALLY MEANT TO BE USED WITH TENSORDATALOADER
     # def __getitem__(self, idxs: LongTensor) -> LongTensor:
     #     """
     #     :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
