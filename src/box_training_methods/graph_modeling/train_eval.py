@@ -307,7 +307,7 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         negative_sampler = None
 
     dataset = GraphDataset(
-        training_edges, num_nodes=num_nodes, negative_sampler=negative_sampler
+        training_edges, num_nodes=num_nodes, negative_sampler=negative_sampler, graph_npz_file=npz_file
     )
 
     logger.info(f"Number of edges in dataset: {dataset.num_edges:,}")

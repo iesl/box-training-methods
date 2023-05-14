@@ -8,6 +8,7 @@ from typing import *
 
 import attr
 import numpy as np
+import networkx as nx
 import torch
 from loguru import logger
 from scipy.sparse import coo_matrix
@@ -24,7 +25,7 @@ from box_training_methods.metrics import *
 ### VISUALIZATION IMPORTS ONLY
 from box_training_methods.visualization.plot_2d_tbox import plot_2d_tbox
 from box_training_methods.models.box import TBox
-from box_training_methods.graph_modeling.dataset import create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
+from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from_npz, create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
 neg_sampler_obj_to_str = {
     RandomNegativeEdges: "random",
     HierarchicalNegativeEdges: "hierarchical"
@@ -489,7 +490,11 @@ class GraphModelingEvalLooper:
         num_nodes = self.dl.sampler.data_source.num_nodes
         ground_truth = np.zeros((num_nodes, num_nodes))
         # pos_index = self.dl.dataset.edges.cpu().numpy()
-        pos_index = self.dl.sampler.data_source.edges.cpu().numpy()
+        if self.dl.sampler.data_source.graph_npz_file is not None:
+            # for the HANS graph modeling experiments, this will load original TC graph regardless of whether training_edges are TC or TR
+            pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
+        else:
+            pos_index = self.dl.sampler.data_source.edges_tc.cpu().numpy()
         # # release RAM
         # del self.dl.dataset
 

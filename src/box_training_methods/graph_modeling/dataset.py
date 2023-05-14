@@ -621,6 +621,7 @@ class GraphDataset(Dataset):
     edges: Tensor = attr.ib(validator=_validate_edge_tensor)
     num_nodes: int
     negative_sampler: Optional[Callable[[LongTensor,], LongTensor]] = None
+    graph_npz_file: Optional[str] = None
 
     def __attrs_post_init__(self):
         self._device = self.edges.device
