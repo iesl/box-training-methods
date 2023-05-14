@@ -65,7 +65,7 @@ box_training_methods train --task multilabel_classification \
 --model_type hard_box --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy exact
 ```
 
-### BioASQ
+### BioASQ (English)
 
 Example command for `bioasq` task (BioASQ Task A):
 ```
@@ -86,6 +86,25 @@ Example **eval** command:
 --bioasq_huggingface_encoder nlpie/bio-distilbert-uncased \
 --instance_encoder_path /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models/embeddings.epoch-0.step-10.pt \
 --box_model_path /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models/tbox.epoch-0.step-10.pt
+```
+
+### MESINESP2 (Spanish)
+
+Example **train** command:
+```
+CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=0 /usr/bin/env python scripts/box-training-methods train \
+--task bioasq \
+--data_path ./data/bioasq/MESINESP2/ \
+--bioasq_train_path ./data/bioasq/MESINESP2/Subtrack2-Clinical_Trials/Train/training_set_subtrack2.json \
+--bioasq_dev_path ./data/bioasq/MESINESP2/Subtrack2-Clinical_Trials/Development/development_set_subtrack2.json \
+--bioasq_test_path ./data/bioasq/MESINESP2/Subtrack2-Clinical_Trials/Test/test_set_subtrack2.json \
+--bioasq_english False \
+--mesh_parent_child_mapping_path ./data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt \
+--mesh_name_id_mapping_path ./data/bioasq/MESINESP2/DeCS2020.tsv \
+--ancestors_cache_dir /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/ancestors \
+--negatives_cache_dir /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/negatives \
+--model_type tbox --dim 4 --log_batch_size 0 --epochs 25 \
+--bioasq_huggingface_encoder microsoft/biogpt
 ```
 
 ## Citations
