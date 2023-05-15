@@ -1,8 +1,10 @@
+import os
 import math, random
 from pathlib import Path
 from time import time
 import pickle
 import json
+from typing import Any
 import ijson
 from itertools import cycle, islice
 from typing import *
@@ -22,6 +24,8 @@ from sklearn.preprocessing import LabelEncoder
 
 from transformers import AutoTokenizer
 
+from box_training_methods.graph_modeling.dataset import RandomNegativeEdges, HierarchicalNegativeEdges
+
 __all__ = [
     "edges_from_hierarchy_edge_list",
     "name_id_mapping_from_file",
@@ -32,30 +36,46 @@ __all__ = [
 ]
 
 
-def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", mesh=False) -> Tuple[LongTensor, LabelEncoder]:
+def edges_from_hierarchy_edge_list(edge_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt", 
+                                   input_child_parent=False,
+                                   output_child_parent=False) -> Tuple[LongTensor, LabelEncoder]:
     """
     Loads edges from a given tsv file into a PyTorch LongTensor.
     Meant for importing data where each edge appears as a line in the file, with
-        <child_id>\t<parent_id>\t{}
-
+        <child_id>\t<parent_id>\t{} if input_child_parent is True
+        <parent_id>\t<child_id>\t{} if input_child_parent is False
     :param edge_file: Path of dataset's hierarchy{_tc}.edge_list
-    :param mesh: implies <parent_id>\t<child_id>, as for "MeSH_parent_child_mapping_2020.txt"
     :returns: PyTorch LongTensor of edges with shape (num_edges, 2), LabelEncoder that numerized labels
     """
     start = time()
     logger.info(f"Loading edges from {edge_file}...")
     edges = pd.read_csv(edge_file, sep=" ", header=None).to_numpy()[:, :2]  # ignore line-final "{}"
-    if mesh:
-        edges[:, [0, 1]] = edges[:, [1, 0]]  # (parent, child) -> (child, parent)
+    if input_child_parent != output_child_parent:
+        edges[:, [0, 1]] = edges[:, [1, 0]]  # reverse parent-child to child-parent (or vice versa)
     le = LabelEncoder()
     edges = torch.tensor(le.fit_transform(edges.flatten()).reshape((-1,2)))
     logger.info(f"Loading complete, took {time() - start:0.1f} seconds")
     return edges, le
 
 
-def name_id_mapping_from_file(name_id_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt") -> Dict:
+def name_id_mapping_from_file(name_id_file: Union[Path, str] = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt",
+                              english=True) -> Dict:
+    if english:
+        SEP = "="
+    else: # MESINESP
+        SEP = "\t"
     with open(name_id_file, "r") as f:
-        name_id = {line.split("=")[0].strip(): line.split("=")[1].strip() for line in f}
+        lines = f.readlines()
+
+    name_id = dict()
+    for i, line in enumerate(lines):
+        if i == 0 and not english:
+            continue
+        try:
+            name_id[line.split(SEP)[0].strip()] = line.split(SEP)[1].strip()
+        except IndexError:
+            breakpoint()
+
     id_name = {i:n for n,i in name_id.items()}
     return name_id, id_name
 
@@ -146,6 +166,52 @@ class ARFFReader(object):
         return data
 
 
+class CollateMLCFn(object):
+
+    def __init__(self, train, num_labels) -> None:
+        self.train = train
+        self.num_labels = num_labels
+
+    def __call__(self, batch):
+        
+        feats = torch.stack([x["feats"] for x in batch])
+
+        if self.train:
+
+            positives = [[m for m in x["positive_labels_for_instance"]] for x in batch]
+            max_pos_len = max(map(len, positives))
+            positives = [p + [-1] * (max_pos_len - len(p)) for p in positives]
+            positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+            
+            positives_pad_mask = torch.clone(positives)
+            positives_pad_mask[positives_pad_mask != -1] = 1
+            positives_pad_mask[positives_pad_mask == -1] = 0
+
+            # xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+            # max_xpos_len = max(map(len, xpositives))
+            # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+            # xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+
+            negatives = [[m for m in x["negative_labels_for_instance"]] for x in batch]
+            max_neg_len = max(map(len, negatives))
+            negatives = [n + [-1] * (max_neg_len - len(n)) for n in negatives]
+            negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+            
+            negatives_pad_mask = torch.clone(negatives)
+            negatives_pad_mask[negatives_pad_mask != -1] = 1
+            negatives_pad_mask[negatives_pad_mask == -1] = 0
+
+            return feats, positives, positives_pad_mask, negatives, negatives_pad_mask
+        
+        labels = [torch.tensor(x['positive_labels_for_instance']) for x in batch]
+        targets = []
+        for i in range(len(labels)):
+            targets.append(torch.zeros((self.num_labels,)).scatter_(0, labels[i], 1.0).tolist())
+        targets = torch.tensor(targets)
+
+        return feats, targets
+
+
 @attr.s(auto_attribs=True)
 class InstanceLabelsDataset(Dataset):
     """
@@ -154,32 +220,66 @@ class InstanceLabelsDataset(Dataset):
     instance_feats: Tensor
     labels: Tensor
     label_encoder: LabelEncoder  # label set accessable via label_encoder.classes_
+    negative_sampler: Union[RandomNegativeEdges, HierarchicalNegativeEdges]
+    train: bool = True
 
     def __attrs_post_init__(self):
 
         self._device = self.instance_feats.device
         self.instance_dim = self.instance_feats.shape[1]
-        self.labels = self.prune_and_encode_labels_for_instances()
+        # self.labels = self.prune_and_encode_labels_for_instances()
+        self.labels = self.encode_labels_for_instances()
         
-        instance_label_pairs = []
-        for i, ls in enumerate(self.labels):
-            instance_label_pairs.extend([i, l] for l in ls)
-        self.instance_label_pairs = torch.tensor(instance_label_pairs)
-        
-        self.instance_feats = torch.nn.Embedding.from_pretrained(self.instance_feats, freeze=True)
+        # instance_label_pairs = []
+        # for i, ls in enumerate(self.labels):
+        #     instance_label_pairs.extend([i, l] for l in ls)
+        # self.instance_label_pairs = torch.tensor(instance_label_pairs) 
+        # self.instance_feats = torch.nn.Embedding.from_pretrained(self.instance_feats, freeze=True)
 
-    def __getitem__(self, idxs: LongTensor) -> LongTensor:
-        """
-        :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
-        :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
-        """
-        instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
-        label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
-        instance_feats = self.instance_feats(instance_idxs)
-        return instance_feats, label_idxs
+        self.negatives = []
+        self.positive_heads_for_labels = []
+        self.negative_heads_for_labels = []
+        for ls in self.labels:
+            self.negatives.append(self.get_negatives_for_labels(ls))
+            self.positive_heads_for_labels.append(self.get_parents_of_labels(ls))
+            # self.negative_heads_for_labels.
+
+        self.collate_fn = CollateMLCFn(train=self.train, num_labels=len(self.label_encoder.classes_))
+
+    def __getitem__(self, index: int) -> Dict:
+        feats = self.instance_feats[index]
+        positive_labels_for_instance = self.labels[index]
+        negative_labels_for_instance = self.negatives[index]
+        positive_heads_for_labels = self.positive_heads_for_labels[index]
+        negative_heads_for_labels = self.negative_heads_for_labels[index]
+        ret = {
+            "feats": feats,
+            "positive_labels_for_instance": positive_labels_for_instance,
+            "negative_labels_for_instance": negative_labels_for_instance,
+            "positive_heads_for_labels": positive_heads_for_labels,
+            "negative_heads_for_labels": negative_heads_for_labels,
+        }
+        return ret
+
+    ## ORIGINALLY MEANT TO BE USED WITH TENSORDATALOADER
+    # def __getitem__(self, idxs: LongTensor) -> LongTensor:
+    #     """
+    #     :param idxs: LongTensor of shape (...,) indicating the index of the examples which to select
+    #     :return: instance_feats of shape (batch_size, instance_dim), label_idxs of shape (batch_size, num_labels)
+    #     """
+    #     instance_idxs = self.instance_label_pairs[idxs][:, 0].to(self._device)
+    #     label_idxs = self.instance_label_pairs[idxs][:, 1].to(self._device)
+    #     instance_feats = self.instance_feats(instance_idxs)
+    #     return instance_feats, label_idxs
 
     def __len__(self):
         return len(self.labels)
+
+    def encode_labels_for_instances(self):
+        encoded_labels = []
+        for ls in self.labels:
+            encoded_labels.append(self.label_encoder.transform(ls))
+        return encoded_labels
 
     def prune_and_encode_labels_for_instances(self):
         pruned_labels = []
@@ -201,6 +301,19 @@ class InstanceLabelsDataset(Dataset):
                 pruned_ls.append(ls[i])
         return pruned_ls
 
+    def get_negatives_for_labels(self, ls):
+        negatives = set()
+        for l in ls:
+            negatives.update(sorted(list(set(self.negative_sampler.negative_roots[l].tolist()).difference({self.negative_sampler.EMB_PAD}))))
+        return negatives
+
+    def get_parents_of_labels(self, ls):
+        parents = set()
+        breakpoint()
+        for l in ls:
+            parents.update()
+        return parents
+
     @property
     def device(self):
         return self._device
@@ -212,30 +325,73 @@ class InstanceLabelsDataset(Dataset):
         return self
 
 
-def collate_mesh_fn(batch, tokenizer):
-    inputs = tokenizer(
-        [
-            x["journal"]
-            + f" {tokenizer.sep_token} "
-            + x["title"]
-            + f" {tokenizer.sep_token} "
-            + x["abstractText"]
-            for x in batch
-        ],
-        return_tensors="pt",
-        padding=True,
-    )
-    # TODO: Handle variable number of positives and negatives using padding
-    positives = torch.tensor(
-        [[m for m in x["positives"]] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_positives)
-    negatives = torch.tensor(
-        [[m for m in x["negatives"]] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_negatives)
-    extra_positive_edges = torch.tensor(
-        [x["extra_positive_edges"] for x in batch], dtype=torch.long
-    )  # shape = (batch_size, num_extra_positive_edges)
-    return inputs, positives, negatives
+class CollateMeshFn(object):
+
+    def __init__(self, tokenizer, train, num_labels) -> None:
+        self.tokenizer = tokenizer
+        self.train = train
+        self.PAD = self.tokenizer.pad_token_id
+        self.max_seq_len = min(1000, self.tokenizer.model_max_length)
+        self.num_labels = num_labels
+    
+    def __call__(self, batch):
+
+        # TODO add CLS token at beginning or end?
+        tok_input = []
+        for x in batch:
+            if x["journal"]:
+                journal = x["journal"]
+            else:
+                journal = ""
+            if x["title"]:
+                title = x["title"]
+            else:
+                title = ""
+            if x["abstractText"]:
+                abstractText = x["abstractText"]
+            else:
+                abstractText = ""
+            tok_input.append(journal + f" {self.tokenizer.sep_token} " + title + f" {self.tokenizer.sep_token} " + abstractText)
+
+        inputs = self.tokenizer(
+            tok_input,
+            return_tensors="pt",
+            padding=True,  # pad_token_id = 1
+            truncation=True,
+            max_length=self.max_seq_len,
+        )
+        # logger.warning(f"max_length={self.max_seq_len}")
+        # logger.warning(f"inputs['input_ids'].shape={inputs['input_ids'].shape}")
+
+        if self.train:
+
+            positives = [[m for m in x["positives"]] for x in batch]
+            max_pos_len = max(map(len, positives))
+            positives = [p + [self.PAD] * (max_pos_len - len(p)) for p in positives]
+            positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+            
+            xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+            max_xpos_len = max(map(len, xpositives))
+            xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+            xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+
+            negatives = [[m for m in x["negatives"]] for x in batch]
+            max_neg_len = max(map(len, negatives))
+            negatives = [n + [self.PAD] * (max_neg_len - len(n)) for n in negatives]
+            negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+
+            return inputs, positives, negatives
+        
+        else:
+            
+            labels = [torch.tensor(list(set(x['positives']).union(x['extra_positive_edges']))) for x in batch]
+
+            targets = []
+            for i in range(len(labels)):
+                targets.append(torch.zeros((self.num_labels,)).scatter_(0, labels[i], 1.0).tolist())
+            targets = torch.tensor(targets)
+
+            return inputs, targets
 
 
 @attr.s(auto_attribs=True)
@@ -252,29 +408,73 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
     file_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/allMeSH_2020.json"
     parent_child_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_parent_child_mapping_2020.txt"
     name_id_mapping_path: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/MeSH_name_id_mapping_2020.txt"
-    cycle: bool = True
+    ancestors_cache_dir: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/ancestors"
+    negatives_cache_dir: str = "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives"
     # TODO: DP: Wrap the dataset into a Shuffler instance to allow shuffling of the iterable dataset
     # https://pytorch.org/data/beta/generated/torchdata.datapipes.iter.Shuffler.html#torchdata.datapipes.iter.Shuffler
 
+    train: bool = True
+    huggingface_encoder: str = "microsoft/biogpt"
+    negative_ratio: int = 500
+
+    english: bool = True  # True means English BioASQ Task A, False means Spanish MESINESP
+
     def __attrs_post_init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
-        self.edges, self.le = edges_from_hierarchy_edge_list(
-            edge_file=self.parent_child_mapping_path, mesh=True
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
+        self.edges, self.label_encoder = edges_from_hierarchy_edge_list(
+            edge_file=self.parent_child_mapping_path,
+            input_child_parent=False,
+            output_child_parent=False,
+        )  # parent-child edge format for DiGraph
         self.name_id, self.id_name = name_id_mapping_from_file(
-            name_id_file=self.name_id_mapping_path
+            name_id_file=self.name_id_mapping_path, english=self.english            
         )
         self.G = nx.DiGraph(
-            self.edges[:, [1, 0]].tolist()
-        )  # reverse to parent-child format for DiGraph
+            self.edges.tolist()
+        )
+        logger.warning(f"num_nodes: {len(self.G.nodes())}")
+
+        if self.english:
+            self.ID_KEY = "pmid"
+            self.LABELS_KEY = "meshMajor"
+            self.ENCODING="windows-1252"
+        else:  # MESINESP
+            self.ID_KEY = "id"
+            self.LABELS_KEY = "decsCodes"
+            self.ENCODING="utf-8"
+
+        self.collate_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
-        return [self.name_id[label] for label in labels]
+        anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
+        # 'Pyruvate Dehydrogenase (Acetyl-Transferring) Kinase'
+        ids = []
+        for label in labels:
+            try:
+                ids.append(self.name_id[label])
+            except KeyError:
+                logger.warning(f'Label {label} not in self.name_id!')
+                if label in anomalies:
+                    ids.append(anomalies[label])
+                else:
+                    continue
+        return ids
 
     def id_to_label(self, ids: Iterable[str]) -> List[str]:
         anomalies = {'anatomy_category': 'Anatomy',
                      'persons_category': 'Persons'}
-        return [self.id_name[id] if id not in anomalies.keys() else anomalies[id] for id in ids]
+        # Clostridium difficile
+        labels = []
+        for id in ids:
+            try:
+                labels.append(self.id_name[id])
+            except KeyError:
+                logger.warning(f'Id {id} not in self.id_name!')
+                if id in anomalies:
+                    labels.append(anomalies[id])
+                else:
+                    continue
+        return labels
 
     def get_extra_positive_edges(
         self, labels: Iterable[str]
@@ -282,11 +482,17 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         """Uses the MESH hierarchy to find extra positive edges for the labels.
         These are edges from positive children to positive ancestors.
         """
-        label_encs = self.le.transform(self.label_to_id(labels))
+        if self.english:
+            label_encs = self.label_encoder.transform(self.label_to_id(labels))
+        else:
+            label_encs = self.label_encoder.transform(labels)
         ancestor_encs = [nx.ancestors(self.G, l) for l in label_encs]
         ancestor_encs = set().union(*ancestor_encs)
-        # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
+        # ancestors = self.id_to_label(self.label_encoder.inverse_transform(list(ancestor_encs)))  # for debugging
         return ancestor_encs
+
+    def read_set(self, pickled_set_fpath: str) -> Set:
+        return pickle.load(open(pickled_set_fpath, "rb"))
 
     def get_negatives(self, positives: np.ndarray) -> np.ndarray:
             """Samples num_negatives labels from the mesh vocab that are not in labels"""
@@ -295,31 +501,74 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             all_negatives = set()
             for p in positives:
                 # For each positive label, get the set of its ancestors
-                anc = self.read_set(self.ancestor_cache_path / f"{p}-ancestors.pkl").add(p)
+                anc = self.read_set(os.path.join(self.ancestors_cache_dir, f"{p}-ancestors.pkl"))
+                anc.add(p)
                 all_positives = all_positives.union(anc)
-                negs = self.read_set(self.negatives_cache_path / f"{p}-negatives.pkl")
+                negs = self.read_set(os.path.join(self.negatives_cache_dir, f"{p}-negatives.pkl"))
                 all_negatives = all_negatives.union(negs)
             final_negatives = all_negatives.difference(all_positives)
-            return np.array(list(final_negatives))
+            final_negatives = np.array(list(final_negatives))
+            sampled_negatives = np.random.choice(final_negatives, size=(self.negative_ratio,))
+            return sampled_negatives
 
-    def parse_file(self, file_path):
-        with open(file_path, encoding="windows-1252", mode="r") as f:
-            for article in ijson.items(f, "articles.item"):
-                article["positives"] = self.le.transform(self.label_to_id(article["meshMajor"]))
-                article["extra_positive_edges"] = self.get_extra_positive_edges(
-                    article["meshMajor"]
-                )
-                article["negatives"] = self.get_negatives(article["positives"])
-                yield article
+    def prune_positives(self, positives: np.ndarray) -> np.ndarray:
+        prune = set()
+        for l1 in positives:
+            if l1 not in prune:
+                l1_ancestors = nx.ancestors(self.G, l1)
+                for l2 in positives:
+                    if l1 != l2:
+                        # if l2 is an ancestor of l1, drop l2
+                        if l2 in l1_ancestors:
+                            prune.add(l2)
+        keep = list(set(positives).difference(prune))
+        return np.array(keep)
+
+    def prune_positives_v2(self, positives: np.ndarray, ancestor_set: set) -> np.ndarray:
+        return np.array(list(set(positives).difference(ancestor_set)))
+
+    def parse_file(self, file_path, worker_id=0, num_workers=5):
+        with open(file_path, encoding=self.ENCODING, mode="r") as f:
+            next(f)  # skip   {"articles":[  line
+            for i, line in enumerate(f):  # for article in ijson.items(f, "articles.item"):
+                if (i - worker_id) % num_workers == 0:
+                    # TODO parse line
+                    line = line.strip().rstrip(",")
+                    if line[-2:] == "]}" and self.english:
+                        line = line[:-2]
+                    article = json.loads(line)  # every intermediate line ends with ",", last line ends with "]}"
+                    article = self.parse_article(article)
+                    yield article
+                else:
+                    # TODO skip line
+                    continue
+
+    def parse_article(self, article):
+        if self.english:
+            article["positives"] = self.label_encoder.transform(self.label_to_id(article[self.LABELS_KEY]))
+        else:
+            article["positives"] = self.label_encoder.transform(article[self.LABELS_KEY])
+        article["extra_positive_edges"] = self.get_extra_positive_edges(
+            article[self.LABELS_KEY]
+        )
+        article["positives"] = self.prune_positives_v2(article["positives"], ancestor_set=article["extra_positive_edges"])
+        if self.train:
+            article["negatives"] = self.get_negatives(article["positives"])
+        return article
 
     def get_stream(self, file_path):
-        if self.cycle:
-            return cycle(self.parse_file(file_path))
-        else:
-            return self.parse_file(file_path)
+        return self.parse_file(file_path)
 
     def __iter__(self):
-        return self.get_stream(self.file_path)
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading, return the full iterator
+            worker_id = 0
+            num_workers = 1
+        else:  # in a worker process
+            # split workload
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+        return self.parse_file(file_path=self.file_path, worker_id=worker_id, num_workers=num_workers)
 
 
 def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsIterDataset):
@@ -354,7 +603,7 @@ def mesh_leaf_label_stats(bioasq: BioASQInstanceLabelsIterDataset):
 
 
 def write_bioasq_pmids_to_file():
-    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler())
     bioasq_iter = iter(bioasq)
     with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid_sorted_list.v3.txt", "+a") as f:
         while (x := next(bioasq_iter, None)) is not None:
@@ -377,7 +626,7 @@ def shuffle_and_split_bioasq_pmids():
 
 def distribute_mesh_articles_among_splits_based_on_pmids():
 
-    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), cycle=False)
+    bioasq = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler())
     bioasq_iter = iter(bioasq)
     with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/pmid.train.shuffled.txt", "r") as f:
         train_pmids = {l.strip() for l in f.readlines() if l.strip()}
@@ -425,7 +674,69 @@ def distribute_mesh_articles_among_splits_based_on_pmids():
         f.write("]}")
 
 
+def check_no_two_labels_have_ancestor_relationship():
+    bioasq = BioASQInstanceLabelsIterDataset()
+    bioasq_iter = iter(bioasq)
+    count_ancestors = 0
+    count_no_ancestors = 0
+    for i in range(10000):
+        print(i)
+        article = next(bioasq_iter)
+        # print(f"processing article {article['pmid']}")
+        ancestor_descendant_pair = False
+        for label_a in article['positives']:
+            for label_b in article['positives']:
+                if label_b in nx.ancestors(bioasq.G, label_a):
+                    ancestor_descendant_pair = True
+                    descendant_label = bioasq.id_name[bioasq.le.inverse_transform([label_a]).item()]
+                    ancestor_label = bioasq.id_name[bioasq.le.inverse_transform([label_b]).item()]
+                    # print(f"article {article['pmid']} has descendant~ancestor pair {descendant_label} ~ {ancestor_label}")
+        if ancestor_descendant_pair:
+            count_ancestors += 1
+        else:
+            count_no_ancestors += 1
+    breakpoint()
+
+
+def convert_decs_obo_to_parent_child_format(decs_obo_fp="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.obo",
+                                            output_parent_child_fp="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt"):
+    
+    with open(decs_obo_fp, "r") as f:
+        chunks = f.read().strip().split("\n\n")
+        
+    chunks = [c.strip().split("\n") for c in chunks[2:]]
+
+    def process_chunk(c):
+        id = [x for x in c if x.startswith('id: ')]
+        assert len(id) == 1
+        id = id[0][len('id: '):].strip('"')
+        is_a = [x[len('is_a: '):].strip('"') for x in c if x.startswith('is_a: ')]
+        return id, is_a
+
+    id_to_is_a = list()
+    for c in chunks:
+        id, is_a = process_chunk(c)
+        id_to_is_a.append((id, is_a))
+
+    parent_child_mapping = []
+    for child, parents in id_to_is_a:
+        for parent in parents:
+            parent_child_mapping.append((parent, child))
+
+    with open(output_parent_child_fp, "w") as f:
+        f.write("\n".join([" ".join(l) for l in parent_child_mapping]))
+
+
 if __name__ == "__main__":
-    bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json", cycle=False)
-    bioasq_test_iter = iter(bioasq_test)
-    print(next(bioasq_test_iter))
+    # bioasq_test = BioASQInstanceLabelsIterDataset(mesh_negative_sampler=MESHNegativeSampler(), file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/test.2020.json")
+    # bioasq_test_iter = iter(bioasq_test)
+    # print(next(bioasq_test_iter))
+
+    # convert_decs_obo_to_parent_child_format()
+
+    mesinesp = BioASQInstanceLabelsIterDataset(file_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/Subtrack1-Scientific_Literature/Train/training_set_subtrack1_all.json",
+                                                  parent_child_mapping_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.parent_child_mapping.txt",
+                                                  name_id_mapping_path="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/DeCS2020.tsv",
+                                                  english=False)
+    mesinesp_iter = iter(mesinesp)
+    print(next(mesinesp_iter))

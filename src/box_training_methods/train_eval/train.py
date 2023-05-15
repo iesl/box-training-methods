@@ -13,14 +13,13 @@ import torch
 import wandb
 from loguru import logger
 from torch.nn import Module
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from wandb_utils.loggers import WandBLogger
 
 from pytorch_utils import TensorDataLoader, cuda_if_available
 from pytorch_utils.training import EarlyStopping, ModelCheckpoint
 from .loopers import GraphModelingTrainLooper, MultilabelClassificationTrainLooper,\
     GraphModelingEvalLooper, MultilabelClassificationEvalLooper
-from box_training_methods.multilabel_classification.dataset import collate_mesh_fn
 from box_training_methods import metric_logger
 
 
@@ -145,15 +144,20 @@ def setup(**config):
     elif config["task"] == "multilabel_classification":
         taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_training_data(device, **config)
         taxonomy_dataloader = TensorDataLoader(taxonomy_dataset, batch_size=2 ** config["log_batch_size"], shuffle=True)
-        train_dataloader = TensorDataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], shuffle=True)
-        dev_dataloader = TensorDataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
-        test_dataloader = TensorDataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, shuffle=True)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, shuffle=False)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=test_dataset.collate_fn, shuffle=False)
     elif config["task"] == "bioasq":
-        taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, **config)
-        # TODO create dataloader instantiated with collate_mesh_fn
+        train_dataset, dev_dataset, test_dataset = task_train_eval.setup_bioasq_training_data(device, **config)
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, num_workers=12)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
 
     if isinstance(config["log_interval"], float):
-        config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
+        if config["task"] != "bioasq":
+            config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
+        else:
+            config["log_interval"] = 10000
     logger.info(f"Log every {config['log_interval']:,} instances")
     logger.info(f"Stop after {config['patience']:,} logs show no improvement in loss")
 
@@ -163,8 +167,14 @@ def setup(**config):
     if config["task"] == "graph_modeling":
         model, loss_func = task_train_eval.setup_model(train_dataset.num_nodes, device, **config)
     elif config["task"] in {"multilabel_classification", "bioasq"}:
-        box_model, instance_encoder, scorer, label_label_loss_func = \
-            task_train_eval.setup_model(taxonomy_dataset.num_nodes, train_dataset.instance_dim, device, **config)
+        if config["task"] == "multilabel_classification":
+            num_labels = len(train_dataset.label_encoder.classes_)
+            instance_dim = train_dataset.instance_dim
+        else:
+            num_labels = len(train_dataset.le.classes_)
+            instance_dim = 768  # FIXME has to be same as encoder model output!
+        box_model, instance_encoder, loss_func = \
+            task_train_eval.setup_model(num_labels, instance_dim, device, **config)
 
     # setup optimizer
     if config["task"] == "graph_modeling":
@@ -196,15 +206,15 @@ def setup(**config):
             eval_loopers.extend([
                 MultilabelClassificationEvalLooper(
                     name="Validation",
-                    model=box_model,
+                    box_model=box_model,
+                    instance_model=instance_encoder,
                     dl=dev_dataloader,
-                    batchsize=2 ** config["log_eval_batch_size"],
                 ),
                 MultilabelClassificationEvalLooper(
                     name="Test",
-                    model=box_model,
+                    box_model=box_model,
+                    instance_model=instance_encoder,
                     dl=test_dataloader,
-                    batchsize=2 ** config["log_eval_batch_size"],
                 )
             ])
     if config["task"] == "graph_modeling":
@@ -225,19 +235,18 @@ def setup(**config):
             name="Train",
             box_model=box_model,
             instance_model=instance_encoder,
-            scorer=scorer,
-            instance_label_dl=train_dataloader,
-            label_label_dl=taxonomy_dataloader,
+            dl=train_dataloader,
             opt=opt,
-            label_label_loss_func=label_label_loss_func,
+            loss_func=loss_func,
             eval_loopers=eval_loopers,
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
+            bioasq=config["task"]=="bioasq",
         )
 
     if config["task"] == "graph_modeling":
         models = (model,)
     elif config["task"] in {"multilabel_classification", "bioasq"}:
-        models = (box_model, instance_encoder, scorer)
+        models = (box_model, instance_encoder)
 
     return models, train_looper

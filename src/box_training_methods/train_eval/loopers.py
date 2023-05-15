@@ -3,17 +3,21 @@ from __future__ import annotations
 import time
 import os
 import json
+from pathlib import Path
 from typing import *
 
 import attr
 import numpy as np
+import networkx as nx
 import torch
 from loguru import logger
 from scipy.sparse import coo_matrix
 from torch.nn import Module
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
-from itertools import chain
+
+import torchmetrics
+from box_training_methods.graph_modeling.metrics.mlc_metrics import MeanAvgPrecision, MicroAvgPrecision
 
 from pytorch_utils.exceptions import StopLoopingException
 from pytorch_utils.loggers import Logger
@@ -24,7 +28,7 @@ from box_training_methods.metrics import *
 ### VISUALIZATION IMPORTS ONLY
 from box_training_methods.visualization.plot_2d_tbox import plot_2d_tbox
 from box_training_methods.models.box import TBox
-from box_training_methods.graph_modeling.dataset import create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
+from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from_npz, create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
 neg_sampler_obj_to_str = {
     RandomNegativeEdges: "random",
     HierarchicalNegativeEdges: "hierarchical"
@@ -136,7 +140,10 @@ class GraphModelingTrainLooper:
                 negative_padding_mask = negative_padding_mask[..., 0].float()   # deduplicate
 
             batch_out = self.model(batch_in)
-            loss = self.loss_func(batch_out, negative_padding_mask=negative_padding_mask)
+            if negative_padding_mask is not None:
+                loss = self.loss_func(batch_out, negative_padding_mask=negative_padding_mask)
+            else:
+                loss = self.loss_func(batch_out)
 
             # This is not always going to be the right thing to check.
             # In a more general setting, we might want to consider wrapping the DataLoader in some way
@@ -230,11 +237,10 @@ class MultilabelClassificationTrainLooper:
     name: str
     box_model: Module
     instance_model: Module
-    scorer: Module
-    instance_label_dl: DataLoader  # [(x1, l_{1_x1}), ..., (x1, l_{k_x1}), (x2, l_{1_x2}), ..., (x2, l_{k_x2})]  # used for positive examples
-    label_label_dl: DataLoader
+    dl: DataLoader
+    taxonomy_dl: Optional[DataLoader]
     opt: torch.optim.Optimizer
-    label_label_loss_func: Callable
+    loss_func: Callable
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
     eval_loopers: Iterable[EvalLooper] = attr.ib(factory=tuple)
     early_stopping: Callable = lambda z: None
@@ -245,6 +251,7 @@ class MultilabelClassificationTrainLooper:
     log_interval: Optional[Union[IntervalConditional, int]] = attr.ib(
         default=None, converter=IntervalConditional.interval_conditional_converter
     )
+    bioasq: bool = True
 
     def __attrs_post_init__(self):
         if isinstance(self.eval_loopers, GraphModelingEvalLooper) or \
@@ -260,6 +267,11 @@ class MultilabelClassificationTrainLooper:
         self.best_metrics = {}
         self.previous_best = None
 
+        if self.bioasq:
+            self.train_loop = self.bioasq_train_loop
+        else:
+            self.train_loop = self.mlc_train_loop
+
     def loop(self, epochs: int):
         try:
             self.running_losses = []
@@ -268,6 +280,12 @@ class MultilabelClassificationTrainLooper:
                 self.instance_model.train()
                 with torch.enable_grad():
                     self.train_loop(epoch)
+
+                    # evaluate after each epoch
+                    for eval_looper in self.eval_loopers:
+                        if eval_looper.name == "Validation":
+                            eval_looper.loop()
+
         except StopLoopingException as e:
             logger.warning(str(e))
         finally:
@@ -291,115 +309,135 @@ class MultilabelClassificationTrainLooper:
             #     predictions_coo.append(prediction_coo)
             return metrics, predictions_coo
 
-    def train_loop(self, epoch: Optional[int] = None):
+    def biaosq_train_loop(self, epoch: Optional[int] = None):
         """
         Internal loop for a single epoch of training
         :return: list of losses per batch
         """
 
-        examples_this_epoch = 0
-        examples_in_single_epoch = len(self.instance_label_dl.dataset)
         last_time_stamp = time.time()
         num_batch_passed = 0
-        label_label_iter = iter(self.label_label_dl)
-        for iteration, batch in enumerate(
-            tqdm(self.instance_label_dl, desc=f"[{self.name}] Batch", leave=False)
-        ):
 
-            # (batch_size, instance_feat_dim), (batch_size,)
-            instance_batch_in, label_batch_in = batch
+        logger.info(f'Start looping epoch {epoch}')
 
-            breakpoint()
+        batch_times = []
+        batch_sum = 0
+        step = 0
 
-            # TODO introduce label set batch in
+        begin_dl_iter = time.time()
+        dl_iter = iter(self.dl)
+        
+        while True:
 
-            # TODO RandomNegativeEdges currently doesn't store adjacency matrix
-            positive_label_label_idxs = create_positive_edges_from_tails(tails=label_batch_in.cpu(), A=self.label_label_dl.dataset.negative_sampler.A)  # FIXME only HierarchicalNegativeEdges has A attribute, not RandomNegativeEdges
-            negative_label_label_idxs = self.label_label_dl.dataset.negative_sampler(positive_label_label_idxs)
-            label_label_batch_in = torch.cat([positive_label_label_idxs.unsqueeze(1), negative_label_label_idxs], dim=1)
+            try:
+                begin_batch = time.time()
+                self.opt.zero_grad()
 
-            # try:
-            #     label_label_batch_in = next(label_label_iter)
-            # except StopIteration:
-            #     label_label_iter = iter(self.label_label_dl)
-            #     label_label_batch_in = next(label_label_iter)
+                begin_next = time.time()
+                batch = next(dl_iter)
+                end_next = time.time()
+                logger.critical(f"\nnext took {end_next - begin_next} seconds")
+
+                inputs, positives, negatives = batch
+                # logger.warning(f"inputs: {inputs['input_ids'].shape}")
+                # logger.warning(f"positives: {positives.shape}")
+                # logger.warning(f"negatives: {negatives.shape}")
+
+                begin_nn = time.time()
+                input_encs = self.instance_model(inputs)
+                
+                positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
+                negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
+                positive_energy = self.box_model.scores(instance_boxes=input_encs, 
+                                                        label_boxes=positive_boxes, 
+                                                        intersection_temp=0.01, 
+                                                        volume_temp=1.0)
+                negative_energy = self.box_model.scores(instance_boxes=input_encs,
+                                                        label_boxes=negative_boxes, 
+                                                        intersection_temp=0.01, 
+                                                        volume_temp=1.0)
+                end_nn = time.time()
+                logger.critical(f"NNs took {end_nn - begin_nn} seconds")
+
+                # TODO input-label scorer
+                begin_loss_back = time.time()
+                loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy)
+                loss = loss.sum(dim=0)
+
+                if torch.isnan(loss).any():
+                    raise StopLoopingException("NaNs in loss")
+                self.running_losses.append(loss.detach().item())
+
+                loss.backward()
+                end_loss_back = time.time()
+                logger.critical(f"Loss and backward took {end_loss_back - begin_loss_back} seconds")
+
+                num_batch_passed += 1
+                self.opt.step()
+
+                end_batch = time.time()
+
+                batch_delta = end_batch - begin_batch
+                batch_times.append(batch_delta)
+                step += 1
+                batch_sum += batch_delta
+                logger.critical(f"Batch took {batch_delta} seconds")        
+                logger.critical(f"Batch running avg: {batch_sum / step}")
+
+                if step % 1000 == 0:
+                    self.save_models(epoch=epoch, step=step)
+
+            except StopIteration:
+                break
+
+        end_dl_iter = time.time()
+        logger.critical(f"Iterating through dl took {str(end_dl_iter - begin_dl_iter)} seconds")
+
+    def mlc_train_loop(self, epoch: Optional[int] = None):
+        """
+        Internal loop for a single epoch of training
+        :return: list of losses per batch
+        """
+
+        last_time_stamp = time.time()
+        num_batch_passed = 0
+        losses_for_epoch = []
+
+        logger.info(f'Start looping epoch {epoch}')
+
+        for batch in self.dl:
 
             self.opt.zero_grad()
 
-            num_in_batch = instance_batch_in.shape[0]
-            self.looper_metrics["Total Examples"] += num_in_batch
-            examples_this_epoch += num_in_batch
+            feats, positives, positives_pad_mask, negatives, negatives_pad_mask = batch
+            feat_encs = self.instance_model(feats)
 
-            # compute L_G for labels related to instance
-            label_label_batch_out = self.box_model(label_label_batch_in)
-            label_label_loss = self.label_label_loss_func(label_label_batch_out).sum(dim=0)
+            positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
+            negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
+            positive_energy = self.box_model.scores(instance_boxes=feat_encs, 
+                                                    label_boxes=positive_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)
+            negative_energy = self.box_model.scores(instance_boxes=feat_encs,
+                                                    label_boxes=negative_boxes, 
+                                                    intersection_temp=0.01, 
+                                                    volume_temp=1.0)
 
-            # compute instance encoding
-            # TODO need to tailor loss function to instance-label without negative samples
-            # TODO pass in padding mask for exact hierarchical negative sampling
-            instance_boxes = self.instance_model(instance_batch_in)     # (bsz, 2 [-/+], dim)
-            instance_label_batch_out = self.box_model.forward(idxs=label_batch_in, instances=instance_boxes)
-            
-            # FIXME currently the loss fn expects a specified shape with negatives
-            # instance_label_loss = self.label_label_loss_func(instance_label_batch_out).sum(dim=0)
-
-            loss = label_label_loss # + instance_label_loss
+            # TODO input-label scorer
+            loss = self.loss_func(log_prob_pos=positive_energy, log_prob_neg=negative_energy, positive_padding_mask=positives_pad_mask, negative_padding_mask=negatives_pad_mask)
+            loss = loss.sum(dim=0)
 
             if torch.isnan(loss).any():
                 raise StopLoopingException("NaNs in loss")
             self.running_losses.append(loss.detach().item())
+
+            losses_for_epoch.append(loss.detach().item())
             loss.backward()
 
-            for param in chain(self.box_model.parameters(), self.instance_model.parameters()):
-                if param.grad is not None:
-                    if torch.isnan(param.grad).any():
-                        raise StopLoopingException("NaNs in grad")
-
             num_batch_passed += 1
-            # TODO: Refactor the following
             self.opt.step()
-            # If you have a scheduler, keep track of the learning rate
-            if self.scheduler is not None:
-                self.scheduler.step()
-                if len(self.opt.param_groups) == 1:
-                    self.looper_metrics[f"Learning Rate"] = self.opt.param_groups[0][
-                        "lr"
-                    ]
-                else:
-                    for i, param_group in enumerate(self.opt.param_groups):
-                        self.looper_metrics[f"Learning Rate (Group {i})"] = param_group[
-                            "lr"
-                        ]
 
-            # Check performance every self.log_interval number of examples
-            last_log = self.log_interval.last
-
-            if self.log_interval(self.looper_metrics["Total Examples"]):
-                current_time_stamp = time.time()
-                time_spend = (current_time_stamp - last_time_stamp) / num_batch_passed
-                last_time_stamp = current_time_stamp
-                num_batch_passed = 0
-                self.logger.collect({"avg_time_per_batch": time_spend})
-
-                self.logger.collect(self.looper_metrics)
-                mean_loss = sum(self.running_losses) / (
-                    self.looper_metrics["Total Examples"] - last_log
-                )
-                metrics = {"Mean Loss": mean_loss}
-                self.logger.collect(
-                    {
-                        **{
-                            f"[{self.name}] {metric_name}": value
-                            for metric_name, value in metrics.items()
-                        },
-                        "Epoch": epoch + examples_this_epoch / examples_in_single_epoch,
-                    }
-                )
-                self.logger.commit()
-                self.running_losses = []
-                self.update_best_metrics_(metrics)
-                self.save_if_best_(self.best_metrics["Mean Loss"])
-                self.early_stopping(self.best_metrics["Mean Loss"])
+        logger.critical(f"Average loss for epoch {epoch}: {sum(losses_for_epoch)/len(losses_for_epoch)}")
 
     def update_best_metrics_(self, metrics: Dict[str, float]) -> None:
         for name, comparison in self.best_metrics_comparison_functions.items():
@@ -421,6 +459,20 @@ class MultilabelClassificationTrainLooper:
             self.save_box_model(self.box_model)
             self.save_instance_model(self.instance_model)
             self.previous_best = best_metric
+
+    def save_models(self, epoch, step) -> None:
+        
+        logger.critical(f"box_model run_dir: {self.save_box_model.run_dir}")
+        self.save_box_model(self.box_model)
+        self.save_box_model.run_dir = Path("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models")
+        self.save_box_model.filename = f'tbox.epoch-{epoch}.step-{step}.pt'
+        self.save_box_model.save_to_disk(None)
+        
+        logger.critical(f"instance_model run_dir: {self.save_instance_model.run_dir}")
+        self.save_instance_model(self.instance_model)
+        self.save_instance_model.run_dir = Path("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/bioasq_models")
+        self.save_instance_model.filename = f'embeddings.epoch-{epoch}.step-{step}.pt'
+        self.save_instance_model.save_to_disk(None)
 
 
 @attr.s(auto_attribs=True)
@@ -444,7 +496,11 @@ class GraphModelingEvalLooper:
         num_nodes = self.dl.sampler.data_source.num_nodes
         ground_truth = np.zeros((num_nodes, num_nodes))
         # pos_index = self.dl.dataset.edges.cpu().numpy()
-        pos_index = self.dl.sampler.data_source.edges.cpu().numpy()
+        if self.dl.sampler.data_source.graph_npz_file is not None:
+            # for the HANS graph modeling experiments, this will load original TC graph regardless of whether training_edges are TC or TR
+            pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
+        else:
+            pos_index = self.dl.sampler.data_source.edges_tc.cpu().numpy()
         # # release RAM
         # del self.dl.dataset
 
@@ -497,22 +553,22 @@ class GraphModelingEvalLooper:
             ~np.eye(num_nodes, dtype=bool)
         )
 
-        if save_dir is not None:
+        # if save_dir is not None:
             
-            predictions_path = os.path.join(save_dir, f'predictions.epoch-{epoch}.npy')
-            with open(predictions_path, 'wb') as f:
-                np.save(f, coo_matrix(predictions), allow_pickle=True)
-            logger.info(f"Saving predictions to: {predictions_path}")
+        #     predictions_path = os.path.join(save_dir, f'predictions.epoch-{epoch}.npy')
+        #     with open(predictions_path, 'wb') as f:
+        #         np.save(f, coo_matrix(predictions), allow_pickle=True)
+        #     logger.info(f"Saving predictions to: {predictions_path}")
 
-            prediction_scores_path = os.path.join(save_dir, f'prediction_scores.epoch-{epoch}.npy')
-            with open(prediction_scores_path, 'wb') as f:
-                np.save(f, prediction_scores, allow_pickle=True)
-            logger.info(f"Saving prediction_scores to: {prediction_scores_path}")
+        #     prediction_scores_path = os.path.join(save_dir, f'prediction_scores.epoch-{epoch}.npy')
+        #     with open(prediction_scores_path, 'wb') as f:
+        #         np.save(f, prediction_scores, allow_pickle=True)
+        #     logger.info(f"Saving prediction_scores to: {prediction_scores_path}")
             
-            metrics_path = os.path.join(save_dir, f'metrics.epoch-{epoch}.json')
-            with open(metrics_path, 'w') as f:
-                json.dump(metrics, f, indent=4, sort_keys=True)
-            logger.info(f"Saving metrics to: {metrics_path}")
+        #     metrics_path = os.path.join(save_dir, f'metrics.epoch-{epoch}.json')
+        #     with open(metrics_path, 'w') as f:
+        #         json.dump(metrics, f, indent=4, sort_keys=True)
+        #     logger.info(f"Saving metrics to: {metrics_path}")
         
         return metrics, coo_matrix(predictions)
 
@@ -520,72 +576,44 @@ class GraphModelingEvalLooper:
 @attr.s(auto_attribs=True)
 class MultilabelClassificationEvalLooper:
     name: str
-    model: Module
+    box_model: Module
+    instance_model: Module
     dl: DataLoader
-    batchsize: int
     logger: Logger = attr.ib(factory=Logger)
     summary_func: Callable[Dict] = lambda z: None
 
     @torch.no_grad()
     def loop(self) -> Dict[str, Any]:
-        self.model.eval()
+        self.instance_model.eval()
+        self.box_model.eval()
 
-        logger.debug("Evaluating model predictions on full adjacency matrix")
-        time1 = time.time()
-        previous_device = next(iter(self.model.parameters())).device
-        num_nodes = self.dl.dataset.num_nodes
-        ground_truth = np.zeros((num_nodes, num_nodes))
-        pos_index = self.dl.dataset.edges.cpu().numpy()
-        # release RAM
-        del self.dl.dataset
+        dl_iter = iter(self.dl)
+        # mlap = torchmetrics.classification.MultilabelAveragePrecision(num_labels=len(self.dl.dataset.label_encoder.classes_), average='micro')
+        micro_map = MicroAvgPrecision()
+        instance_map = MeanAvgPrecision()
 
-        ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
+        while True:
 
-        prediction_scores = np.zeros((num_nodes, num_nodes))  # .to(previous_device)
+            try:
+                batch = next(dl_iter)
+                inputs, labels = batch
+                input_encs = self.instance_model(inputs)                                         # (batch_size, 2, dim)
+                label_boxes = self.box_model.boxes.unsqueeze(dim=0)                              # (1, num_labels, 2, dim)
+                label_boxes = label_boxes.repeat(input_encs.shape[0], 1, 1, 1)                   # (batch_size, num_labels, 2, dim)
+                energy = self.box_model.scores(instance_boxes=input_encs,
+                                               label_boxes=label_boxes,
+                                               intersection_temp=0.01,
+                                               volume_temp=1.0)
+                # TODO compute predictions from energy score
 
-        input_x, input_y = np.indices((num_nodes, num_nodes))
-        input_x, input_y = input_x.flatten(), input_y.flatten()
-        input_list = np.stack([input_x, input_y], axis=-1)
-        number_of_entries = len(input_x)
+                # metrics = calculate_optimal_F1(torch.flatten(labels).numpy(), torch.flatten(energy).cpu().numpy())
+                instance_map(-energy, labels)
+                micro_map(-energy, labels)
 
-        with torch.no_grad():
-            pbar = tqdm(
-                desc=f"[{self.name}] Evaluating", leave=False, total=number_of_entries
-            )
-            cur_pos = 0
-            while cur_pos < number_of_entries:
-                last_pos = cur_pos
-                cur_pos += self.batchsize
-                if cur_pos > number_of_entries:
-                    cur_pos = number_of_entries
+            except StopIteration:
+                break
 
-                ids = torch.tensor(input_list[last_pos:cur_pos], dtype=torch.long)
-                cur_preds = self.model(ids.to(previous_device)).cpu().numpy()
-                prediction_scores[
-                    input_x[last_pos:cur_pos], input_y[last_pos:cur_pos]
-                ] = cur_preds
-                pbar.update(self.batchsize)
-
-        prediction_scores_no_diag = prediction_scores[~np.eye(num_nodes, dtype=bool)]
-        ground_truth_no_diag = ground_truth[~np.eye(num_nodes, dtype=bool)]
-
-        time2 = time.time()
-        logger.debug(f"Evaluation time: {time2 - time1}")
-
-        # TODO: release self.dl from gpu
-        del input_x, input_y
-
-        logger.debug("Calculating optimal F1 score")
-        metrics = calculate_optimal_F1(ground_truth_no_diag, prediction_scores_no_diag)
-        time3 = time.time()
-        logger.debug(f"F1 calculation time: {time3 - time2}")
-        logger.info(f"Metrics: {metrics}")
-
-        self.logger.collect({f"[{self.name}] {k}": v for k, v in metrics.items()})
-        self.logger.commit()
-
-        predictions = (prediction_scores > metrics["threshold"]) * (
-            ~np.eye(num_nodes, dtype=bool)
-        )
-
-        return metrics, coo_matrix(predictions)
+        instance_map_value = instance_map.get_metric(reset=True)
+        micro_map_value = micro_map.get_metric(reset=True)
+        logger.critical(f"instance_map_value: {instance_map_value}")
+        logger.critical(f"micro_map_value: {micro_map_value}")

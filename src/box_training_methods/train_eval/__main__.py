@@ -44,6 +44,24 @@ class IntOrPercent(click.ParamType):
     required=True,
 )
 @click.option(
+    "--bioasq_train_path",
+    type=click.Path(),
+    help="path to bioasq train json",
+    required=False,
+)
+@click.option(
+    "--bioasq_dev_path",
+    type=click.Path(),
+    help="path to bioasq dev json",
+    required=False,
+)
+@click.option(
+    "--bioasq_test_path",
+    type=click.Path(),
+    help="path to bioasq test json",
+    required=False,
+)
+@click.option(
     "--mesh_parent_child_mapping_path",
     type=click.Path(),
     help="parent-child mapping text file, e.g. 'MeSH_parent_child_mapping_2020.txt'",
@@ -52,6 +70,28 @@ class IntOrPercent(click.ParamType):
     "--mesh_name_id_mapping_path",
     type=click.Path(),
     help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
+)
+@click.option(
+    "--ancestors_cache_dir",
+    type=click.Path(),
+    help="dir to per-node pickled ancestor sets"
+)
+@click.option(
+    "--negatives_cache_dir",
+    type=click.Path(),
+    help="dir to per-node pickled negative sets"
+)
+@click.option(
+    "--bioasq_english",
+    type=bool,
+    default = True,
+    help="if True we're doing English BioASQ Task A, if False we're doing Spanish MESINESP",
+)
+@click.option(
+    "--bioasq_huggingface_encoder",
+    type=str,
+    default="microsoft/biogpt",
+    help="huggingface model identifier to use for encoding PubMed articles for bioasq",
 )
 @click.option(
     "--model_type",
@@ -87,6 +127,13 @@ class IntOrPercent(click.ParamType):
     default=None,
     help="whether to train using an undirected or directed graph (default is model dependent)",
     show_default=False,
+)
+@click.option(
+    "--sample_positive_edges_from_tc_or_tr",
+    default=None,
+    required=False,
+    type=click.Choice(["tc", "tr"], case_sensitive=False),
+    help="whether to sample positives from transitive closure, transitive reduction, or original graph"
 )
 @click.option(
     "--dim", type=int, default=4, help="dimension for embedding space",
@@ -247,6 +294,121 @@ def train(**config):
 
 
 @click.command(context_settings=dict(show_default=True),)
-def eval():
+@click.option(
+    "--task",
+    type=click.Choice(["graph_modeling", "bioasq"], case_sensitive=False),
+    help="task to evaluate on with saved model checkpoint(s), currently only necessary for BioASQ",
+    required=True
+)
+@click.option(
+    "--data_path",
+    type=click.Path(),
+    help="directory or file with data (eg. data/graph/some_tree)",
+    required=True,
+)
+@click.option(
+    "--mesh_parent_child_mapping_path",
+    type=click.Path(),
+    help="parent-child mapping text file, e.g. 'MeSH_parent_child_mapping_2020.txt'",
+)
+@click.option(
+    "--mesh_name_id_mapping_path",
+    type=click.Path(),
+    help="MeSH name-id mapping text file, e.g. 'MeSH_name_id_mapping_2020.txt'",
+)
+@click.option(
+    "--bioasq_huggingface_encoder",
+    type=str,
+    default="microsoft/biogpt",
+    help="huggingface model identifier to use for encoding PubMed articles for bioasq",
+)
+@click.option(
+    "--instance_encoder_path",
+    type=str,
+    help="path to saved instance encoder",
+)
+@click.option(
+    "--model_type",
+    type=click.Choice(
+        [
+            "tbox",
+            "vector_sim",
+        ],
+        case_sensitive=False,
+    ),
+    default="tbox",
+    help="model architecture to use",
+)
+@click.option(
+    "--vector_separate_io / --vector_no_separate_io",
+    default=True,
+    help="enable/disable using separate input/output representations for vector / bilinear vector model",
+)
+@click.option(
+    "--vector_use_bias / --vector_no_use_bias",
+    default=False,
+    help="enable/disable using bias term in vector / bilinear",
+)
+@click.option(
+    "--box_model_path",
+    type=str,
+    help="path to saved box model",
+)
+@click.option(
+    "--cuda / --no_cuda", default=True, help="enable/disable CUDA (eg. no nVidia GPU)",
+)
+@click.option(
+    "--wandb / --no_wandb",
+    default=False,
+    help="enable/disable logging to Weights and Biases",
+)
+@click.option(
+    "--undirected / --directed",
+    default=None,
+    help="whether to train using an undirected or directed graph (default is model dependent)",
+    show_default=False,
+)
+@click.option(
+    "--dim", type=int, default=4, help="dimension for embedding space",
+)
+@click.option(
+    "--log_batch_size",
+    type=int,
+    default=10,
+    help="batch size for training will be 2**LOG_BATCH_SIZE",
+)  # Using batch sizes which are 2**n for some integer n may help optimize GPU efficiency
+@click.option(
+    "--log_eval_batch_size",
+    type=int,
+    default=15,
+    help="batch size for eval will be 2**LOG_EVAL_BATCH_SIZE",
+)  # Using batch sizes which are 2**n for some integer n may help optimize GPU efficiency
+@click.option(
+    "--box_intersection_temp",
+    type=float,
+    default=0.01,
+    help="temperature of intersection calculation (hyperparameter for gumbel_box, initialized value for tbox)",
+)
+@click.option(
+    "--box_volume_temp",
+    type=float,
+    default=1.0,
+    help="temperature of volume calculation (hyperparameter for gumbel_box, initialized value for tbox)",
+)
+@click.option(
+    "--tbox_temperature_type",
+    type=click.Choice(["global", "per_dim", "per_entity", "per_entity_per_dim"]),
+    default="per_entity_per_dim",
+    help="type of learned temperatures (for tbox model)",
+)
+@click.option(
+    "--output_dir",
+    type=str,
+    default=None,
+    help="output directory for recording current hyper-parameters and results",
+)
+def eval(**config):
     """Evaluate an embedding representation on a task with boxes"""
-    pass
+    from .eval import evaluation
+
+    evaluation(config)

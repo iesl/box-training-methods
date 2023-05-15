@@ -9,7 +9,7 @@ import torch
 from torch.nn import Module
 from pytorch_utils import TensorDataLoader, cuda_if_available
 
-from .dataset import edges_from_hierarchy_edge_list, ARFFReader, InstanceLabelsDataset, BioASQInstanceLabelsDataset
+from .dataset import edges_from_hierarchy_edge_list, ARFFReader, InstanceLabelsDataset, BioASQInstanceLabelsIterDataset
 from box_training_methods.graph_modeling.dataset import RandomNegativeEdges, \
     HierarchicalNegativeEdges, GraphDataset
 
@@ -22,6 +22,7 @@ from box_training_methods.models.temps import (
 from box_training_methods.models.box import BoxMinDeltaSoftplus, TBox
 from box_training_methods.graph_modeling.loss import (
     BCEWithLogsNegativeSamplingLoss,
+    BCEWithLogsNegativeSamplingLossMLC,
     BCEWithLogitsNegativeSamplingLoss,
     BCEWithDistancesNegativeSamplingLoss,
     MaxMarginOENegativeSamplingLoss,
@@ -30,6 +31,7 @@ from box_training_methods.graph_modeling.loss import (
 from box_training_methods.multilabel_classification.instance_encoder import InstanceAsPointEncoder, InstanceAsBoxEncoder
 from box_training_methods.multilabel_classification.instance_scorers.instance_as_box_scorers.hard_box_scorer import HardBoxScorer
 
+from box_training_methods.multilabel_classification.bioasq_instance_encoder import BioASQInstanceEncoder
 
 __all__ = [
     "setup_model",
@@ -38,63 +40,51 @@ __all__ = [
 ]
 
 
-def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.device], **config) -> Tuple[Module, Callable]:
-    model_type = config["model_type"].lower()
-    if model_type == "gumbel_box":
-        box_model = BoxMinDeltaSoftplus(
-            num_labels,
-            config["dim"],
-            volume_temp=config["box_volume_temp"],
-            intersection_temp=config["box_intersection_temp"],
-        )
-        label_label_loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
-    elif model_type == "tbox":
-        temp_type = {
-            "global": GlobalTemp,
-            "per_dim": PerDimTemp,
-            "per_entity": PerEntityTemp,
-            "per_entity_per_dim": PerEntityPerDimTemp,
-        }
-        Temp = temp_type[config["tbox_temperature_type"]]
+def setup_model(num_labels: int, instance_dim: int, device: Union[str, torch.device], eval_only=False, **config) -> Tuple[Module, Callable]:
+    temp_type = {
+        "global": GlobalTemp,
+        "per_dim": PerDimTemp,
+        "per_entity": PerEntityTemp,
+        "per_entity_per_dim": PerEntityPerDimTemp,
+    }
+    Temp = temp_type[config["tbox_temperature_type"]]
 
-        box_model = TBox(
-            num_labels,
-            config["dim"],
-            intersection_temp=Temp(
-                config["box_intersection_temp"],
-                0.0001,
-                100,
-                dim=config["dim"],
-                num_entities=num_labels,
-            ),
-            volume_temp=Temp(
-                config["box_volume_temp"],
-                0.01,
-                1000,
-                dim=config["dim"],
-                num_entities=num_labels,
-            ),
-        )
-        label_label_loss_func = BCEWithLogsNegativeSamplingLoss(config["negative_weight"])
-    elif model_type == "hard_box":
-        box_model = TBox(
-            num_labels,
-            config["dim"],
-            hard_box=True
-        )
-        label_label_loss_func = PushApartPullTogetherLoss(config["negative_weight"])
-    else:
-        raise ValueError(f'Model type {config["model_type"]} does not exist')
+    box_model = TBox(
+        num_labels,
+        config["dim"],
+        intersection_temp=Temp(
+            config["box_intersection_temp"],
+            0.0001,
+            100,
+            dim=config["dim"],
+            num_entities=num_labels,
+        ),
+        volume_temp=Temp(
+            config["box_volume_temp"],
+            0.01,
+            1000,
+            dim=config["dim"],
+            num_entities=num_labels,
+        ),
+    )
+    if not eval_only:
+        loss_func = BCEWithLogsNegativeSamplingLossMLC(config["negative_weight"])
     box_model.to(device)
 
     # TODO args from click
-    instance_encoder = InstanceAsBoxEncoder(instance_dim=instance_dim, hidden_dim=64, output_dim=config["dim"])
+    if config["task"] == "multilabel_classification":
+        instance_encoder = InstanceAsBoxEncoder(instance_dim=instance_dim, hidden_dim=64, output_dim=config["dim"])
+    else:  # config["task"] == "bioasq"
+        instance_encoder = BioASQInstanceEncoder(output_dim=config["dim"], huggingface_encoder=config["bioasq_huggingface_encoder"])
     instance_encoder.to(device)
 
-    # TODO args from click
-    scorer = HardBoxScorer()
+    if not eval_only:
+        return box_model, instance_encoder, loss_func
 
-    return box_model, instance_encoder, scorer, label_label_loss_func
+    instance_encoder.load_state_dict(torch.load(config["instance_encoder_path"]))
+    box_model.load_state_dict(torch.load(config["box_model_path"]))
+
+    return box_model, instance_encoder
 
 
 def setup_training_data(device: Union[str, torch.device], **config) -> \
@@ -114,7 +104,9 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     hierarchy_edge_list_file = data_dir / "hierarchy.edgelist"
 
     # 1. read label taxonomy into GraphDataset
-    taxonomy_edges, label_encoder = edges_from_hierarchy_edge_list(edge_file=hierarchy_edge_list_file)
+    taxonomy_edges, label_encoder = edges_from_hierarchy_edge_list(edge_file=hierarchy_edge_list_file,
+                                                                   input_child_parent=True,
+                                                                   output_child_parent=True)  # (child, parent) format for GraphDataset
     label_set = label_encoder.classes_
     num_labels = len(label_set)
 
@@ -155,9 +147,9 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     instance_feats_test = torch.tensor([i['x'] for i in data_test], device=device)
     labels_test = [i['labels'] for i in data_test]
 
-    train_dataset = InstanceLabelsDataset(instance_feats=instance_feats_train, labels=labels_train, label_encoder=label_encoder)
-    dev_dataset = InstanceLabelsDataset(instance_feats=instance_feats_dev, labels=labels_dev, label_encoder=label_encoder)
-    test_dataset = InstanceLabelsDataset(instance_feats=instance_feats_test, labels=labels_test, label_encoder=label_encoder)
+    train_dataset = InstanceLabelsDataset(instance_feats=instance_feats_train, labels=labels_train, label_encoder=label_encoder, negative_sampler=negative_sampler, train=True)
+    dev_dataset = InstanceLabelsDataset(instance_feats=instance_feats_dev, labels=labels_dev, label_encoder=label_encoder, negative_sampler=negative_sampler, train=False)
+    test_dataset = InstanceLabelsDataset(instance_feats=instance_feats_test, labels=labels_test, label_encoder=label_encoder, negative_sampler=negative_sampler, train=False)
 
     # TODO update these stats
     # logger.info(f"Number of edges in dataset: {dataset.num_edges:,}")
@@ -173,31 +165,59 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     return taxonomy_dataset, train_dataset, dev_dataset, test_dataset
 
 
-def setup_mesh_training_data(device: Union[str, torch.device], **config):
-    start = time()
+def setup_bioasq_training_data(device: Union[str, torch.device], eval_only: bool = False, **config):
+
     bioasq_path = Path(config["data_path"])
+    if "bioasq_train_path" in config:
+        bioasq_train_path = Path(config["bioasq_train_path"])
+    else:
+        bioasq_train_path = bioasq_path / "train.jsonl"
+    if "bioasq_dev_path" in config:
+        bioasq_dev_path = Path(config["bioasq_dev_path"])
+    else:
+        bioasq_train_path = bioasq_path / "train.jsonl"
+    if "bioasq_test_path" in config:
+        bioasq_test_path = Path(config["bioasq_test_path"])
+    else:
+        bioasq_test_path = bioasq_path / "test.jsonl"
+
     mesh_parent_child_path = Path(config["mesh_parent_child_mapping_path"])
     mesh_name_id_path = Path(config["mesh_name_id_mapping_path"])
 
-    mesh_negative_sampler = MESHNegativeSampler()  # TODO add args
+    if not eval_only:
+        train_dataset = BioASQInstanceLabelsIterDataset(
+            file_path=bioasq_train_path,
+            parent_child_mapping_path=mesh_parent_child_path,
+            name_id_mapping_path=mesh_name_id_path,
+            ancestors_cache_dir=config["ancestors_cache_dir"],
+            negatives_cache_dir=config["negatives_cache_dir"],
+            huggingface_encoder=config["bioasq_huggingface_encoder"],
+            train=True,
+            english=config["bioasq_english"],
+        )
 
-    train_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
-        file_path=bioasq_path / "train.jsonl",
-        parent_child_mapping_path=mesh_parent_child_path,
-        name_id_mapping_path=mesh_name_id_path,
-    )
     validation_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
-        file_path=bioasq_path / "val.jsonl",
+        file_path=bioasq_dev_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        ancestors_cache_dir=config["ancestors_cache_dir"],
+        negatives_cache_dir=config["negatives_cache_dir"],
+        huggingface_encoder=config["bioasq_huggingface_encoder"],
+        train=False,
+        english=config["bioasq_english"],
     )
     test_dataset = BioASQInstanceLabelsIterDataset(
-        mesh_negative_sampler=mesh_negative_sampler,
-        file_path=bioasq_path / "test.jsonl",
+        file_path=bioasq_test_path,
         parent_child_mapping_path=mesh_parent_child_path,
         name_id_mapping_path=mesh_name_id_path,
+        ancestors_cache_dir=config["ancestors_cache_dir"],
+        negatives_cache_dir=config["negatives_cache_dir"],
+        huggingface_encoder=config["bioasq_huggingface_encoder"],
+        train=False,
+        english=config["bioasq_english"],
     )
 
-    return train_dataset, validation_dataset, test_dataset
+    if not eval_only:
+        return train_dataset, validation_dataset, test_dataset
+
+    return validation_dataset, test_dataset

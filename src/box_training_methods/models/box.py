@@ -208,3 +208,38 @@ class TBox(Module):
                 overwrite=True,
             )
         return out
+    
+    def scores(self, instance_boxes, label_boxes, intersection_temp, volume_temp):
+        """
+        instance_boxes: (batch_size, 2 (min/-max), dim)
+        label_boxes:    (batch_size, num_labels, 2 (min/-max), dim)
+        """
+
+        label_boxes = label_boxes.unsqueeze(dim=2)                                                                  # (batch_size, num_labels,       1, 2 (min/-max), dim)
+        instance_boxes = torch.broadcast_to(instance_boxes.unsqueeze(dim=1).unsqueeze(dim=1), label_boxes.shape)    # (batch_size, 1 -> num_labels,  1, 2 (min/-max), dim)
+        
+        boxes = torch.cat([label_boxes, instance_boxes], dim=2)   # (batch_size, num_labels, 2 (u/v), 2 (min/-max), dim)
+
+        # calculate Gumbel intersection
+        intersection = intersection_temp * torch.logsumexp(
+            boxes / intersection_temp, dim=-3, keepdim=True
+        )
+        intersection = torch.max(
+            torch.cat((intersection, boxes), dim=-3), dim=-3
+        ).values
+        # combine intersections and marginals, since we are going to perform the same operations on both
+        intersection_and_marginal = torch.stack(
+            (intersection, boxes[..., 1, :, :]), dim=-3
+        )
+        # calculating log volumes
+        # keep in mind that the [...,1,:] represents negative max, thus we negate it
+        log_volumes = torch.sum(
+            torch.log(
+                volume_temp
+                * F.softplus((-intersection_and_marginal.sum(dim=-2)) / volume_temp)
+                + 1e-23
+            ),
+            dim=-1,
+        )
+        out = log_volumes[..., 0] - log_volumes[..., 1]
+        return out
