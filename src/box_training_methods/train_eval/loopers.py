@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
 
 import torchmetrics
+from box_training_methods.graph_modeling.metrics.mlc_metrics import MeanAvgPrecision, MicroAvgPrecision
 
 from pytorch_utils.exceptions import StopLoopingException
 from pytorch_utils.loggers import Logger
@@ -237,6 +238,7 @@ class MultilabelClassificationTrainLooper:
     box_model: Module
     instance_model: Module
     dl: DataLoader
+    taxonomy_dl: Optional[DataLoader]
     opt: torch.optim.Optimizer
     loss_func: Callable
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
@@ -408,9 +410,8 @@ class MultilabelClassificationTrainLooper:
             self.opt.zero_grad()
 
             feats, positives, positives_pad_mask, negatives, negatives_pad_mask = batch
-            
             feat_encs = self.instance_model(feats)
-            
+
             positive_boxes = self.box_model.boxes[positives]  # (batch_size, num_positives, 2, dim)
             negative_boxes = self.box_model.boxes[negatives]  # (batch_size, num_positives, 2, dim)
             positive_energy = self.box_model.scores(instance_boxes=feat_encs, 
@@ -587,7 +588,9 @@ class MultilabelClassificationEvalLooper:
         self.box_model.eval()
 
         dl_iter = iter(self.dl)
-        mlap = torchmetrics.classification.MultilabelAveragePrecision(num_labels=len(self.dl.dataset.label_encoder.classes_), average='micro')
+        # mlap = torchmetrics.classification.MultilabelAveragePrecision(num_labels=len(self.dl.dataset.label_encoder.classes_), average='micro')
+        micro_map = MicroAvgPrecision()
+        instance_map = MeanAvgPrecision()
 
         while True:
 
@@ -604,10 +607,13 @@ class MultilabelClassificationEvalLooper:
                 # TODO compute predictions from energy score
 
                 # metrics = calculate_optimal_F1(torch.flatten(labels).numpy(), torch.flatten(energy).cpu().numpy())
-                mlap(preds=energy.cpu(), target=labels.int().cpu())
+                instance_map(-energy, labels)
+                micro_map(-energy, labels)
 
             except StopIteration:
                 break
 
-        MLAP = mlap.compute()
-        logger.critical(f"MLAP: {MLAP}")
+        instance_map_value = instance_map.get_metric(reset=True)
+        micro_map_value = micro_map.get_metric(reset=True)
+        logger.critical(f"instance_map_value: {instance_map_value}")
+        logger.critical(f"micro_map_value: {micro_map_value}")

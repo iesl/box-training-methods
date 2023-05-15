@@ -178,7 +178,7 @@ class CollateMLCFn(object):
 
         if self.train:
 
-            positives = [[m for m in x["positives"]] for x in batch]
+            positives = [[m for m in x["positive_labels_for_instance"]] for x in batch]
             max_pos_len = max(map(len, positives))
             positives = [p + [-1] * (max_pos_len - len(p)) for p in positives]
             positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
@@ -192,7 +192,7 @@ class CollateMLCFn(object):
             # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
             # xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
 
-            negatives = [[m for m in x["negatives"]] for x in batch]
+            negatives = [[m for m in x["negative_labels_for_instance"]] for x in batch]
             max_neg_len = max(map(len, negatives))
             negatives = [n + [-1] * (max_neg_len - len(n)) for n in negatives]
             negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
@@ -203,7 +203,7 @@ class CollateMLCFn(object):
 
             return feats, positives, positives_pad_mask, negatives, negatives_pad_mask
         
-        labels = [torch.tensor(x['positives']) for x in batch]
+        labels = [torch.tensor(x['positive_labels_for_instance']) for x in batch]
         targets = []
         for i in range(len(labels)):
             targets.append(torch.zeros((self.num_labels,)).scatter_(0, labels[i], 1.0).tolist())
@@ -237,19 +237,27 @@ class InstanceLabelsDataset(Dataset):
         # self.instance_feats = torch.nn.Embedding.from_pretrained(self.instance_feats, freeze=True)
 
         self.negatives = []
+        self.positive_heads_for_labels = []
+        self.negative_heads_for_labels = []
         for ls in self.labels:
             self.negatives.append(self.get_negatives_for_labels(ls))
+            self.positive_heads_for_labels.append(self.get_parents_of_labels(ls))
+            # self.negative_heads_for_labels.
 
         self.collate_fn = CollateMLCFn(train=self.train, num_labels=len(self.label_encoder.classes_))
 
     def __getitem__(self, index: int) -> Dict:
         feats = self.instance_feats[index]
-        labels = self.labels[index]
-        negatives = self.negatives[index]
+        positive_labels_for_instance = self.labels[index]
+        negative_labels_for_instance = self.negatives[index]
+        positive_heads_for_labels = self.positive_heads_for_labels[index]
+        negative_heads_for_labels = self.negative_heads_for_labels[index]
         ret = {
             "feats": feats,
-            "positives": labels,
-            "negatives": negatives,
+            "positive_labels_for_instance": positive_labels_for_instance,
+            "negative_labels_for_instance": negative_labels_for_instance,
+            "positive_heads_for_labels": positive_heads_for_labels,
+            "negative_heads_for_labels": negative_heads_for_labels,
         }
         return ret
 
@@ -298,6 +306,13 @@ class InstanceLabelsDataset(Dataset):
         for l in ls:
             negatives.update(sorted(list(set(self.negative_sampler.negative_roots[l].tolist()).difference({self.negative_sampler.EMB_PAD}))))
         return negatives
+
+    def get_parents_of_labels(self, ls):
+        parents = set()
+        breakpoint()
+        for l in ls:
+            parents.update()
+        return parents
 
     @property
     def device(self):

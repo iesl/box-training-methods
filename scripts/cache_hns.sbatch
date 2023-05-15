@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --gres=gpu:0
-#SBATCH --partition=cpu-long
+#SBATCH --partition=cpu-preempt
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=128GB
 

@@ -52,6 +52,7 @@ def mesh_cache_hns():
         edges=mesh_edges,
         negative_ratio=1,  # doesn't matter for caching
         sampling_strategy="exact",
+        cache_only=True,
     )
 
     HNE.cache_negatives(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/mesh/cache/negatives/")
@@ -74,14 +75,15 @@ def decs_cache_hns():
         edges=mesh_edges,
         negative_ratio=1,  # doesn't matter for caching
         sampling_strategy="exact",
+        cache_only=True,
     )
 
-    HNE.cache_negatives(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/negatives/")
-    HNE.cache_ancestors(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/ancestors/")
+    HNE.cache_negatives(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/negatives.v3/")
+    HNE.cache_ancestors(cache_dir="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/bioasq/MESINESP2/cache/ancestors.v3/")
 
 
 if __name__ == '__main__':
     # traverse_and_cache_hns("/Users/brozonoyer/Desktop/IESL/box-training-methods/data/graphs")
     # traverse_and_cache_hns("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graphs13/")
-    mesh_cache_hns()
+    # mesh_cache_hns()
     decs_cache_hns()
