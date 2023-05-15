@@ -4,6 +4,7 @@ from pathlib import Path
 from time import time
 import pickle
 import json
+from typing import Any
 import ijson
 from itertools import cycle, islice
 from typing import *
@@ -165,32 +166,50 @@ class ARFFReader(object):
         return data
 
 
-def collate_mlc_fn(batch):
+class CollateMLCFn(object):
 
-    feats = torch.stack([x["feats"] for x in batch])
+    def __init__(self, train, num_labels) -> None:
+        self.train = train
+        self.num_labels = num_labels
 
-    positives = [[m for m in x["positives"]] for x in batch]
-    max_pos_len = max(map(len, positives))
-    positives = [p + [-1] * (max_pos_len - len(p)) for p in positives]
-    positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
-    positives_pad_mask = torch.clone(positives)
-    positives_pad_mask[positives_pad_mask != -1] = 1
-    positives_pad_mask[positives_pad_mask == -1] = 0
+    def __call__(self, batch):
+        
+        feats = torch.stack([x["feats"] for x in batch])
 
-    # xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
-    # max_xpos_len = max(map(len, xpositives))
-    # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
-    # xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+        if self.train:
 
-    negatives = [[m for m in x["negatives"]] for x in batch]
-    max_neg_len = max(map(len, negatives))
-    negatives = [n + [-1] * (max_neg_len - len(n)) for n in negatives]
-    negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
-    negatives_pad_mask = torch.clone(negatives)
-    negatives_pad_mask[negatives_pad_mask != -1] = 1
-    negatives_pad_mask[negatives_pad_mask == -1] = 0
+            positives = [[m for m in x["positives"]] for x in batch]
+            max_pos_len = max(map(len, positives))
+            positives = [p + [-1] * (max_pos_len - len(p)) for p in positives]
+            positives = torch.tensor(positives, dtype=torch.long)  # shape = (batch_size, num_positives)
+            
+            positives_pad_mask = torch.clone(positives)
+            positives_pad_mask[positives_pad_mask != -1] = 1
+            positives_pad_mask[positives_pad_mask == -1] = 0
 
-    return feats, positives, positives_pad_mask, negatives, negatives_pad_mask
+            # xpositives = [[m for m in x["extra_positive_edges"]] for x in batch]
+            # max_xpos_len = max(map(len, xpositives))
+            # xpositives = [x + [self.PAD] * (max_xpos_len - len(x)) for x in xpositives]
+            # xpositives = torch.tensor(xpositives, dtype=torch.long)  # shape = (batch_size, num_xpositives)
+
+            negatives = [[m for m in x["negatives"]] for x in batch]
+            max_neg_len = max(map(len, negatives))
+            negatives = [n + [-1] * (max_neg_len - len(n)) for n in negatives]
+            negatives = torch.tensor(negatives, dtype=torch.long)  # shape = (batch_size, num_negatives)
+            
+            negatives_pad_mask = torch.clone(negatives)
+            negatives_pad_mask[negatives_pad_mask != -1] = 1
+            negatives_pad_mask[negatives_pad_mask == -1] = 0
+
+            return feats, positives, positives_pad_mask, negatives, negatives_pad_mask
+        
+        labels = [torch.tensor(x['positives']) for x in batch]
+        targets = []
+        for i in range(len(labels)):
+            targets.append(torch.zeros((self.num_labels,)).scatter_(0, labels[i], 1.0).tolist())
+        targets = torch.tensor(targets)
+
+        return feats, targets
 
 
 @attr.s(auto_attribs=True)
@@ -202,13 +221,14 @@ class InstanceLabelsDataset(Dataset):
     labels: Tensor
     label_encoder: LabelEncoder  # label set accessable via label_encoder.classes_
     negative_sampler: Union[RandomNegativeEdges, HierarchicalNegativeEdges]
-    collate_fn: Callable = collate_mlc_fn
+    train: bool = True
 
     def __attrs_post_init__(self):
 
         self._device = self.instance_feats.device
         self.instance_dim = self.instance_feats.shape[1]
-        self.labels = self.prune_and_encode_labels_for_instances()
+        # self.labels = self.prune_and_encode_labels_for_instances()
+        self.labels = self.encode_labels_for_instances()
         
         # instance_label_pairs = []
         # for i, ls in enumerate(self.labels):
@@ -219,6 +239,8 @@ class InstanceLabelsDataset(Dataset):
         self.negatives = []
         for ls in self.labels:
             self.negatives.append(self.get_negatives_for_labels(ls))
+
+        self.collate_fn = CollateMLCFn(train=self.train, num_labels=len(self.label_encoder.classes_))
 
     def __getitem__(self, index: int) -> Dict:
         feats = self.instance_feats[index]
@@ -244,6 +266,12 @@ class InstanceLabelsDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
+
+    def encode_labels_for_instances(self):
+        encoded_labels = []
+        for ls in self.labels:
+            encoded_labels.append(self.label_encoder.transform(ls))
+        return encoded_labels
 
     def prune_and_encode_labels_for_instances(self):
         pruned_labels = []
@@ -284,7 +312,7 @@ class InstanceLabelsDataset(Dataset):
 
 class CollateMeshFn(object):
 
-    def __init__(self, tokenizer, train, num_labels):
+    def __init__(self, tokenizer, train, num_labels) -> None:
         self.tokenizer = tokenizer
         self.train = train
         self.PAD = self.tokenizer.pad_token_id
@@ -378,7 +406,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
 
     def __attrs_post_init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained(self.huggingface_encoder)
-        self.edges, self.le = edges_from_hierarchy_edge_list(
+        self.edges, self.label_encoder = edges_from_hierarchy_edge_list(
             edge_file=self.parent_child_mapping_path,
             input_child_parent=False,
             output_child_parent=False,
@@ -400,7 +428,7 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
             self.LABELS_KEY = "decsCodes"
             self.ENCODING="utf-8"
 
-        self.collate_mesh_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
+        self.collate_fn = CollateMeshFn(tokenizer=self.tokenizer, train=self.train, num_labels=len(self.G.nodes()))
 
     def label_to_id(self, labels: Iterable[str]) -> List[str]:
         anomalies = {'Respiratory Distress Syndrome, Adult': 'D012128'}  # 'Respiratory Distress Syndrome'
@@ -440,12 +468,12 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
         These are edges from positive children to positive ancestors.
         """
         if self.english:
-            label_encs = self.le.transform(self.label_to_id(labels))
+            label_encs = self.label_encoder.transform(self.label_to_id(labels))
         else:
-            label_encs = self.le.transform(labels)
+            label_encs = self.label_encoder.transform(labels)
         ancestor_encs = [nx.ancestors(self.G, l) for l in label_encs]
         ancestor_encs = set().union(*ancestor_encs)
-        # ancestors = self.id_to_label(self.le.inverse_transform(list(ancestor_encs)))  # for debugging
+        # ancestors = self.id_to_label(self.label_encoder.inverse_transform(list(ancestor_encs)))  # for debugging
         return ancestor_encs
 
     def read_set(self, pickled_set_fpath: str) -> Set:
@@ -502,9 +530,9 @@ class BioASQInstanceLabelsIterDataset(IterableDataset):
 
     def parse_article(self, article):
         if self.english:
-            article["positives"] = self.le.transform(self.label_to_id(article[self.LABELS_KEY]))
+            article["positives"] = self.label_encoder.transform(self.label_to_id(article[self.LABELS_KEY]))
         else:
-            article["positives"] = self.le.transform(article[self.LABELS_KEY])
+            article["positives"] = self.label_encoder.transform(article[self.LABELS_KEY])
         article["extra_positive_edges"] = self.get_extra_positive_edges(
             article[self.LABELS_KEY]
         )

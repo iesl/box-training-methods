@@ -147,9 +147,9 @@ def setup_training_data(device: Union[str, torch.device], **config) -> \
     instance_feats_test = torch.tensor([i['x'] for i in data_test], device=device)
     labels_test = [i['labels'] for i in data_test]
 
-    train_dataset = InstanceLabelsDataset(instance_feats=instance_feats_train, labels=labels_train, label_encoder=label_encoder, negative_sampler=negative_sampler)
-    dev_dataset = InstanceLabelsDataset(instance_feats=instance_feats_dev, labels=labels_dev, label_encoder=label_encoder, negative_sampler=negative_sampler)
-    test_dataset = InstanceLabelsDataset(instance_feats=instance_feats_test, labels=labels_test, label_encoder=label_encoder, negative_sampler=negative_sampler)
+    train_dataset = InstanceLabelsDataset(instance_feats=instance_feats_train, labels=labels_train, label_encoder=label_encoder, negative_sampler=negative_sampler, train=True)
+    dev_dataset = InstanceLabelsDataset(instance_feats=instance_feats_dev, labels=labels_dev, label_encoder=label_encoder, negative_sampler=negative_sampler, train=False)
+    test_dataset = InstanceLabelsDataset(instance_feats=instance_feats_test, labels=labels_test, label_encoder=label_encoder, negative_sampler=negative_sampler, train=False)
 
     # TODO update these stats
     # logger.info(f"Number of edges in dataset: {dataset.num_edges:,}")

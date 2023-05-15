@@ -145,13 +145,13 @@ def setup(**config):
         taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_training_data(device, **config)
         taxonomy_dataloader = TensorDataLoader(taxonomy_dataset, batch_size=2 ** config["log_batch_size"], shuffle=True)
         train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, shuffle=True)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_fn, shuffle=False)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=test_dataset.collate_fn, shuffle=False)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, shuffle=False)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=test_dataset.collate_fn, shuffle=False)
     elif config["task"] == "bioasq":
         train_dataset, dev_dataset, test_dataset = task_train_eval.setup_bioasq_training_data(device, **config)
-        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_mesh_fn, num_workers=12)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn, num_workers=12)
+        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, num_workers=12)
+        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
+        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
 
     if isinstance(config["log_interval"], float):
         if config["task"] != "bioasq":
@@ -168,7 +168,7 @@ def setup(**config):
         model, loss_func = task_train_eval.setup_model(train_dataset.num_nodes, device, **config)
     elif config["task"] in {"multilabel_classification", "bioasq"}:
         if config["task"] == "multilabel_classification":
-            num_labels = len(train_dataset.labels)
+            num_labels = len(train_dataset.label_encoder.classes_)
             instance_dim = train_dataset.instance_dim
         else:
             num_labels = len(train_dataset.le.classes_)
@@ -209,14 +209,12 @@ def setup(**config):
                     box_model=box_model,
                     instance_model=instance_encoder,
                     dl=dev_dataloader,
-                    batchsize=2 ** config["log_eval_batch_size"],
                 ),
                 MultilabelClassificationEvalLooper(
                     name="Test",
                     box_model=box_model,
                     instance_model=instance_encoder,
                     dl=test_dataloader,
-                    batchsize=2 ** config["log_eval_batch_size"],
                 )
             ])
     if config["task"] == "graph_modeling":

@@ -16,6 +16,8 @@ from torch.nn import Module
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
 
+import torchmetrics
+
 from pytorch_utils.exceptions import StopLoopingException
 from pytorch_utils.loggers import Logger
 from pytorch_utils.training import IntervalConditional
@@ -277,10 +279,10 @@ class MultilabelClassificationTrainLooper:
                 with torch.enable_grad():
                     self.train_loop(epoch)
 
-                    # # evaluate after each epoch
-                    # for eval_looper in self.eval_loopers:
-                    #     if eval_looper.name == "Validation":
-                    #         eval_looper.loop()
+                    # evaluate after each epoch
+                    for eval_looper in self.eval_loopers:
+                        if eval_looper.name == "Validation":
+                            eval_looper.loop()
 
         except StopLoopingException as e:
             logger.warning(str(e))
@@ -388,8 +390,6 @@ class MultilabelClassificationTrainLooper:
 
         end_dl_iter = time.time()
         logger.critical(f"Iterating through dl took {str(end_dl_iter - begin_dl_iter)} seconds")
-
-        breakpoint()
 
     def mlc_train_loop(self, epoch: Optional[int] = None):
         """
@@ -578,7 +578,6 @@ class MultilabelClassificationEvalLooper:
     box_model: Module
     instance_model: Module
     dl: DataLoader
-    batchsize: int
     logger: Logger = attr.ib(factory=Logger)
     summary_func: Callable[Dict] = lambda z: None
 
@@ -588,6 +587,8 @@ class MultilabelClassificationEvalLooper:
         self.box_model.eval()
 
         dl_iter = iter(self.dl)
+        mlap = torchmetrics.classification.MultilabelAveragePrecision(num_labels=len(self.dl.dataset.label_encoder.classes_), average='micro')
+
         while True:
 
             try:
@@ -601,8 +602,12 @@ class MultilabelClassificationEvalLooper:
                                                intersection_temp=0.01,
                                                volume_temp=1.0)
                 # TODO compute predictions from energy score
-                metrics = calculate_optimal_F1(torch.flatten(labels).numpy(), torch.flatten(energy).cpu().numpy())
-                breakpoint()
+
+                # metrics = calculate_optimal_F1(torch.flatten(labels).numpy(), torch.flatten(energy).cpu().numpy())
+                mlap(preds=energy.cpu(), target=labels.int().cpu())
 
             except StopIteration:
                 break
+
+        MLAP = mlap.compute()
+        logger.critical(f"MLAP: {MLAP}")
