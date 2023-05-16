@@ -663,17 +663,17 @@ if __name__ == "__main__":
     G = nx.DiGraph()
     G.add_edges_from(edges)
     HNE = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G.edges)),
+        edges=torch.tensor(list(G.edges)), sampling_strategy="uniform"
     )
 
     G_tr = nx.transitive_reduction(G)
     HNE_tr = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G_tr.edges)),
+        edges=torch.tensor(list(G_tr.edges)), sampling_strategy="uniform"
     )
 
     G_tc = nx.transitive_reduction(G)
     HNE_tc = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G_tc.edges)),
+        edges=torch.tensor(list(G_tc.edges)), sampling_strategy="uniform"
     )
 
     assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)

@@ -238,7 +238,6 @@ class MultilabelClassificationTrainLooper:
     box_model: Module
     instance_model: Module
     dl: DataLoader
-    taxonomy_dl: Optional[DataLoader]
     opt: torch.optim.Optimizer
     loss_func: Callable
     scheduler: Optional[torch.optim.lr_scheduler._LRScheduler] = None
