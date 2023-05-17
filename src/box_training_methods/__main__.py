@@ -2,7 +2,7 @@ import click
 
 # graph_modeling is the only task that needs to generate graphs, so treat graph_modeling.generate as top-level group
 from .graph_modeling.generate.__main__ import main as generate
-from .train_eval.__main__ import train, eval
+from .train_eval.__main__ import train, eval, train_final
 
 
 @click.group()
@@ -14,6 +14,7 @@ def main():
 main.add_command(generate, "generate")
 main.add_command(train, "train")
 main.add_command(eval, "eval")
+main.add_command(train_final, "train_final")
 
 if __name__ == "__main__":
     main()
