@@ -302,6 +302,7 @@ def train_final(**config):
         'box_volume_temp': 1.0,
         'tbox_temperature_type': 'global',
         'save_model': False,
+        'save_prediction': False,
         'constrain_deltas_fn': 'sqr',
         'undirected': None,
     }
@@ -320,6 +321,7 @@ def train_final(**config):
 
         try:
             assert len(best_run) == 1
+            best_run = best_run[0]
         except AssertionError:
             best_run = best_run[0]
             print("Multiple best runs found, using the first one")
@@ -327,12 +329,7 @@ def train_final(**config):
 
         final_config['learning_rate'] = best_run['learning_rate']
         final_config['negative_weight'] = best_run['negative_weight']
-    if config['tc_or_tr'] == 'tc':
-        config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=True"])
-    elif config['tc_or_tr'] == 'tr':
-        config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=False"])
-    else:
-        raise ValueError("tc_or_tr must be one of 'tc' or 'tr'")
+    config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=True"])
     if 'balanced_tree' in config['graph_type']:
         if 'branching=10' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
             seed_map = {
