@@ -283,7 +283,7 @@ def train_final(**config):
     from .train import training
     final_config = {
         'task': 'graph_modeling',
-        'negative_permutation_option': 'none',
+        'negatives_permutation_option': 'none',
         'dim': 64,
         'log_batch_size': 9,
         'log_eval_batch_size': 17,
