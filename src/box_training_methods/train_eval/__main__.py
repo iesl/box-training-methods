@@ -396,7 +396,7 @@ def train_final(**config):
             f"graph_seed={config['graph_seed']}"
         ]
         gt, gp = config['graph_type'].split('/')
-        final_config['wandb_tags'].append(f"gt")
+        final_config['wandb_tags'].append(f"{gt}")
         for k_v in gp.split('-'):
             final_config['wandb_tags'].append(k_v)
         final_config['wandb_name'] = f"final_run-{final_config['model_type']}"
