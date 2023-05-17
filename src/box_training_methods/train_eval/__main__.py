@@ -257,19 +257,19 @@ def eval():
 @click.command(context_settings=dict(show_default=True),)
 @click.option("--model_type", type=click.Choice(['tbox', 'vector_sim']), required=True, help="model type")
 @click.option("--graph_type", type=click.Choice([
-    'balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True',
-    'balanced_tree/branching=2-log_num_nodes=13-transitive_closure=True',
-    'balanced_tree/branching=3-log_num_nodes=13-transitive_closure=True',
-    'balanced_tree/branching=5-log_num_nodes=13-transitive_closure=True',
-    'nested_chinese_restaurant_process/alpha=10-log_num_nodes=13-transitive_closure=False',
-    'nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=False',
-    'nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=False',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=True',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=True',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=1-transitive_closure=True',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=10-transitive_closure=True',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True'
+    'balanced_tree/branching=10-log_num_nodes=13',
+    'balanced_tree/branching=2-log_num_nodes=13',
+    'balanced_tree/branching=3-log_num_nodes=13',
+    'balanced_tree/branching=5-log_num_nodes=13',
+    'nested_chinese_restaurant_process/alpha=10-log_num_nodes=13',
+    'nested_chinese_restaurant_process/alpha=100-log_num_nodes=13',
+    'nested_chinese_restaurant_process/alpha=500-log_num_nodes=13',
+    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=1',
+    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=10',
+    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=5',
+    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=1',
+    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=10',
+    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=5'
 ]), help="graph type", required=True)
 @click.option("--tc_or_tr", type=click.Choice(['tc', 'tr']), required=True, help="transitive closure or transitive reduction")
 @click.option("--negative_sampler", type=click.Choice(['hierarchical', 'random']), required=True, help="sampling method")
@@ -326,7 +326,12 @@ def train_final(**config):
 
         final_config['learning_rate'] = best_run['learning_rate']
         final_config['negative_weight'] = best_run['negative_weight']
-
+    if config['tc_or_tr'] == 'tc':
+        config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=True"])
+    elif config['tc_or_tr'] == 'tr':
+        config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=False"])
+    else:
+        raise ValueError("tc_or_tr must be one of 'tc' or 'tr'")
     if 'balanced_tree' in config['graph_type']:
         seed_map = {
             1: 1439248948,
@@ -346,5 +351,17 @@ def train_final(**config):
 
     for k, v in config.items():
         final_config[f"g_{k}"] = v
+    # wandb
+    if final_config['wandb']:
+        final_config['wandb_tags'] = [
+            f"model_type={final_config['model_type']}" , 
+            f"graph_type={final_config['graph_type']}",
+            f"negative_sampler={final_config['negative_sampler']}",
+            f"negative_ratio={final_config['negative_ratio']}",
+            f"seed={final_config['seed']}",
+            f"tc_or_tr={final_config['tc_or_tr']}",
+            f"graph_seed={final_config['graph_seed']}"
+        ]
+        final_config['wandb_name'] = f"final_run-{final_config['model_type']}"
     training(final_config)
     
