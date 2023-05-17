@@ -303,7 +303,6 @@ def train_final(**config):
         'tbox_temperature_type': 'global',
         'save_model': False,
         'constrain_deltas_fn': 'sqr',
-        'undirected': None,
     }
     graphs_dir = '/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graphs13/'
     if config['model_type'] == 'tbox':
@@ -334,16 +333,49 @@ def train_final(**config):
     else:
         raise ValueError("tc_or_tr must be one of 'tc' or 'tr'")
     if 'balanced_tree' in config['graph_type']:
-        seed_map = {
-            1: 1439248948,
-            2: 415728013,
-            3: 1246911898,
-            4: 1901635484,
-        }
+        if 'branching=10' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
+            seed_map = {
+                1: 415728013,
+            }
+
+        elif 'branching=10' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
+            seed_map = {
+                1: 2150935259
+            }
+        elif 'branching=2' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
+            seed_map = {
+                1: 1901635484,
+            }
+        elif 'branching=2' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
+            seed_map = {
+                1: 2902554954,
+            }
+        elif 'branching=3' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
+            seed_map = {
+                1: 1439248948,
+            }
+        elif 'branching=3' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
+            seed_map = {
+                1: 38311313
+            }
+        elif 'branching=5' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
+            seed_map = {
+                1: 1246911898
+            }
+        elif 'branching=5' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
+            seed_map = {
+                1: 367229542
+            }
+        else:
+            raise ValueError("Balanced tree only has branching 2, 3, 5, 10")
+
+
+
         if config["graph_seed"] not in seed_map:
-            raise ValueError("Balanced tree only has seeds 1, 2, 3, 4")
+            raise ValueError("Balanced tree only has seeds 1")
         config['graph_seed'] = seed_map[config['graph_seed']]
-    final_config['data_path'] = str((Path(graphs_dir) / config['graph_type'] / str(config['graph_seed'])).with_suffix('.npz'))
+
+    final_config['data_path'] = str((Path(graphs_dir) / config['graph_type'] / config['graph_seed']).with_suffix('.npz'))
 
     final_config['negative_sampler'] = config['negative_sampler']
     final_config['negative_ratio'] = config['negative_ratio']
@@ -355,17 +387,13 @@ def train_final(**config):
     if final_config['wandb']:
         final_config['wandb_tags'] = [
             f"model_type={final_config['model_type']}" , 
+            f"graph_type={final_config['graph_type']}",
             f"negative_sampler={final_config['negative_sampler']}",
             f"negative_ratio={final_config['negative_ratio']}",
             f"seed={final_config['seed']}",
-            f"tc_or_tr={config['tc_or_tr']}",
-            f"graph_seed={config['graph_seed']}"
+            f"tc_or_tr={final_config['tc_or_tr']}",
+            f"graph_seed={final_config['graph_seed']}"
         ]
-        gt, gp = config['graph_type'].split('/')
-        final_config['wandb_tags'].append(f"gt")
-        for k_v in gp.split('-'):
-            final_config['wandb_tags'].append(k_v)
-
         final_config['wandb_name'] = f"final_run-{final_config['model_type']}"
     training(final_config)
-
+    
