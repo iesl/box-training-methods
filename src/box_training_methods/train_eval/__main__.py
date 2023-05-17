@@ -333,7 +333,7 @@ def train_final(**config):
     if 'balanced_tree' in config['graph_type']:
         if 'branching=10' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
             seed_map = {
-                1: 415728013,
+                1: 415728013, 2: 415728013, 3: 415728013, 4: 415728013, 5: 415728013
             }
 
         elif 'branching=10' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
@@ -342,7 +342,7 @@ def train_final(**config):
             }
         elif 'branching=2' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
             seed_map = {
-                1: 1901635484,
+                1: 1901635484, 2: 1901635484, 3: 1901635484, 4: 1901635484, 5: 1901635484,
             }
         elif 'branching=2' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
             seed_map = {
@@ -350,7 +350,7 @@ def train_final(**config):
             }
         elif 'branching=3' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
             seed_map = {
-                1: 1439248948,
+                1: 1439248948, 2: 1439248948, 3: 1439248948, 4: 1439248948, 5: 1439248948,
             }
         elif 'branching=3' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
             seed_map = {
@@ -358,7 +358,7 @@ def train_final(**config):
             }
         elif 'branching=5' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
             seed_map = {
-                1: 1246911898
+                1: 1246911898, 2: 1246911898, 3: 1246911898, 4: 1246911898, 5: 1246911898
             }
         elif 'branching=5' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
             seed_map = {
