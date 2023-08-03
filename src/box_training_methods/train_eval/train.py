@@ -18,8 +18,7 @@ from wandb_utils.loggers import WandBLogger
 
 from pytorch_utils import TensorDataLoader, cuda_if_available
 from pytorch_utils.training import EarlyStopping, ModelCheckpoint
-from .loopers import GraphModelingTrainLooper, MultilabelClassificationTrainLooper,\
-    GraphModelingEvalLooper, MultilabelClassificationEvalLooper
+from .loopers import GraphModelingTrainLooper, GraphModelingEvalLooper
 from box_training_methods import metric_logger
 
 
@@ -70,11 +69,6 @@ def training(config: Dict) -> None:
     if config["task"] == "graph_modeling":
         model_checkpoint = ModelCheckpoint(run_dir)
         train_looper.save_model = model_checkpoint
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        box_model_checkpoint = ModelCheckpoint(run_dir, "learned_box_model.pt")
-        instance_model_checkpoint = ModelCheckpoint(run_dir, "learned_instance_model.pt")
-        train_looper.save_box_model = box_model_checkpoint
-        train_looper.save_instance_model = instance_model_checkpoint
 
     # TODO standardize what the train_looper returns across tasks - what is predictions_coo?
     metrics, predictions_coo = train_looper.loop(config["epochs"])
@@ -100,9 +94,6 @@ def training(config: Dict) -> None:
     if config["save_model"]:
         if config["task"] == "graph_modeling":
             model_checkpoint.save_to_disk(None)
-        elif config["task"] in {"multilabel_classification", "bioasq"}:
-            box_model_checkpoint.save_to_disk(None)
-            instance_model_checkpoint.save_to_disk(None)
 
     # TODO standardize saving predictions for predictions from all tasks (graphs, labels, etc.)
     if config["save_prediction"]:
@@ -130,8 +121,6 @@ def setup(**config):
 
     if config["task"] == "graph_modeling":
         from box_training_methods.graph_modeling import train_eval as task_train_eval
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        from box_training_methods.multilabel_classification import train_eval as task_train_eval
 
     device = cuda_if_available(use_cuda=config["cuda"])
 
@@ -142,23 +131,9 @@ def setup(**config):
         train_dataloader = TensorDataLoader(
             train_dataset, batch_size=2 ** config["log_batch_size"], shuffle=True
         )
-    elif config["task"] == "multilabel_classification":
-        taxonomy_dataset, train_dataset, dev_dataset, test_dataset = task_train_eval.setup_training_data(device, **config)
-        taxonomy_dataloader = TensorDataLoader(taxonomy_dataset, batch_size=2 ** config["log_batch_size"], shuffle=True)
-        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, shuffle=True)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, shuffle=False)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=test_dataset.collate_fn, shuffle=False)
-    elif config["task"] == "bioasq":
-        train_dataset, dev_dataset, test_dataset = task_train_eval.setup_bioasq_training_data(device, **config)
-        train_dataloader = DataLoader(train_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=train_dataset.collate_fn, num_workers=12)
-        dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
-        test_dataloader = DataLoader(test_dataset, batch_size=2 ** config["log_eval_batch_size"], collate_fn=dev_dataset.collate_fn, num_workers=12)
 
     if isinstance(config["log_interval"], float):
-        if config["task"] != "bioasq":
-            config["log_interval"] = math.ceil(len(train_dataset) * config["log_interval"])
-        else:
-            config["log_interval"] = 10000
+        config["log_interval"] = 10000
     logger.info(f"Log every {config['log_interval']:,} instances")
     logger.info(f"Stop after {config['patience']:,} logs show no improvement in loss")
 
@@ -167,25 +142,11 @@ def setup(**config):
     # TODO remove num_nodes explicit arg from setup_model API
     if config["task"] == "graph_modeling":
         model, loss_func = task_train_eval.setup_model(train_dataset.num_nodes, device, **config)
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        if config["task"] == "multilabel_classification":
-            num_labels = len(train_dataset.label_encoder.classes_)
-            instance_dim = train_dataset.instance_dim
-        else:
-            num_labels = len(train_dataset.le.classes_)
-            instance_dim = 768  # FIXME has to be same as encoder model output!
-        box_model, instance_encoder, loss_func = \
-            task_train_eval.setup_model(num_labels, instance_dim, device, **config)
 
     # setup optimizer
     if config["task"] == "graph_modeling":
         opt = torch.optim.Adam(
             model.parameters(), lr=config["learning_rate"], weight_decay=0.0
-        )
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        # TODO add more params to optimize
-        opt = torch.optim.Adam(
-            box_model.parameters(), lr=config["learning_rate"], weight_decay=0.0
         )
 
     # set Eval Looper
@@ -203,21 +164,6 @@ def setup(**config):
                     output_dir=config["output_dir"],
                 )
             )
-        elif config["task"] in {"multilabel_classification", "bioasq"}:
-            eval_loopers.extend([
-                MultilabelClassificationEvalLooper(
-                    name="Validation",
-                    box_model=box_model,
-                    instance_model=instance_encoder,
-                    dl=dev_dataloader,
-                ),
-                MultilabelClassificationEvalLooper(
-                    name="Test",
-                    box_model=box_model,
-                    instance_model=instance_encoder,
-                    dl=test_dataloader,
-                )
-            ])
     if config["task"] == "graph_modeling":
         train_looper = GraphModelingTrainLooper(
             name="Train",
@@ -231,23 +177,8 @@ def setup(**config):
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
         )
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        train_looper = MultilabelClassificationTrainLooper(
-            name="Train",
-            box_model=box_model,
-            instance_model=instance_encoder,
-            dl=train_dataloader,
-            opt=opt,
-            loss_func=loss_func,
-            eval_loopers=eval_loopers,
-            log_interval=config["log_interval"],
-            early_stopping=EarlyStopping("Loss", config["patience"]),
-            bioasq=config["task"]=="bioasq",
-        )
 
     if config["task"] == "graph_modeling":
         models = (model,)
-    elif config["task"] in {"multilabel_classification", "bioasq"}:
-        models = (box_model, instance_encoder)
 
     return models, train_looper
