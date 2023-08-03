@@ -118,6 +118,10 @@ class IntOrPercent(click.ParamType):
     default="exact",
     help="which negative edges to sample and with what probability to sample them"
 )
+@click.option("--sample_positive_edges_from_tc_or_tr", 
+    type=click.Choice(['tc', 'tr']), 
+    default="tc",
+)
 @click.option(
     "--negative_ratio",
     type=int,

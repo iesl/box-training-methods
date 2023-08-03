@@ -26,7 +26,8 @@ Example **training** command:
 ```
 box_training_methods train --task graph_modeling \
 --data_path ./data/graphs13/balanced_tree/branching\=10-log_num_nodes\=13-transitive_closure\=True/ \
---model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical --hierarchical_negative_sampling_strategy uniform
+--model_type tbox --dim 8 --epochs 25 --negative_sampler hierarchical \ --hierarchical_negative_sampling_strategy uniform \
+--sample_positive_edges_from_tc_or_tr tr
 ```
 
 Example **eval** command (make sure the model hyperparams are the same as the ones the checkpoint was trained on):
