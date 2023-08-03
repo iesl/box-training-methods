@@ -1,6 +1,10 @@
 import torch
 from torch.nn import Module, Parameter
 
+import wandb
+from wandb_utils.loggers import WandBLogger
+from box_training_methods import metric_logger
+
 __all__ = [
     "VectorSim",
     "VectorDist",
@@ -26,6 +30,17 @@ class VectorSim(Module):
         e1 = self.embeddings_in(idxs[..., 0])
         e2 = self.embeddings_out(idxs[..., 1])
         logits = torch.sum(e1 * e2, dim=-1) + self.bias
+
+        if isinstance(metric_logger.metric_logger, WandBLogger):
+            metrics_to_collect = {
+                "embeddings_in norms": wandb.Histogram(torch.norm(self.embeddings_in.weight, dim=-1).detach().cpu()),
+                "embeddings_out norms": wandb.Histogram(torch.norm(self.embeddings_out.weight, dim=-1).detach().cpu()),
+            }
+            metric_logger.metric_logger.collect(
+                {f"[Train] {k}": v for k, v in metrics_to_collect.items()},
+                overwrite=True,
+            )
+
         return logits
 
 

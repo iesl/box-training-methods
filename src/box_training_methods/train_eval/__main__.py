@@ -278,6 +278,10 @@ def eval():
     "--seed", type=int, help="seed for random number generator mostly for the model",
 )
 @click.option("--graph_seed", type=int, help="seed for random number generator mostly for the graph")
+@click.option("--override_lr", type=bool, help="whether or not to override lr in final_config (for debugging)")
+@click.option("--override_lr_value", type=float, help="value to override learning rate with")
+@click.option("--override_negative_weight", type=bool, help="whether or not to override negative weight in final_config (for debugging)")
+@click.option("--override_negative_weight_value", type=float, help="value to override negative weight rate with")
 def train_final(**config):
     """A new entry point for the final runs before neurips"""
     from .train import training
@@ -327,8 +331,15 @@ def train_final(**config):
             print("Multiple best runs found, using the first one")
             print(best_run)
 
-        final_config['learning_rate'] = best_run['learning_rate']
-        final_config['negative_weight'] = best_run['negative_weight']
+        if not config["override_lr"]:
+            final_config['learning_rate'] = best_run['learning_rate']
+        else:
+            final_config['learning_rate'] = config['override_lr_value']
+
+        if not config["override_negative_weight"]:
+            final_config['negative_weight'] = best_run['learning_rate']
+        else:
+            final_config['negative_weight'] = config['override_negative_weight_value']
     config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=True"])
     if 'balanced_tree' in config['graph_type']:
         if 'branching=10' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:

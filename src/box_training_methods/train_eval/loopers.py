@@ -85,9 +85,9 @@ class GraphModelingTrainLooper:
                 with torch.enable_grad():
                     self.train_loop(epoch)
 
-                    # save model at epoch to wandb.run.dir (e.g. /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/wandb/run-20230403_234846-86c2gllp/files/)
-                    self.save_model.filename = f'learned_model.epoch-{epoch}.pt'
-                    self.save_model.save_to_disk(None)
+                    # # save model at epoch to wandb.run.dir (e.g. /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/wandb/run-20230403_234846-86c2gllp/files/)
+                    # self.save_model.filename = f'learned_model.epoch-{epoch}.pt'
+                    # self.save_model.save_to_disk(None)
                     for eval_looper in self.eval_loopers:
                         eval_looper.loop(epoch=epoch, save_dir=self.save_model.run_dir)
 
