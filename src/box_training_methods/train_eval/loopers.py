@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
 
 import torchmetrics
-from box_training_methods.graph_modeling.metrics.mlc_metrics import MeanAvgPrecision, MicroAvgPrecision
 
 from pytorch_utils.exceptions import StopLoopingException
 from pytorch_utils.loggers import Logger
@@ -61,8 +60,7 @@ class GraphModelingTrainLooper:
     )
 
     def __attrs_post_init__(self):
-        if isinstance(self.eval_loopers, GraphModelingEvalLooper) or \
-                isinstance(self.eval_loopers, MultilabelClassificationEvalLooper):
+        if isinstance(self.eval_loopers, GraphModelingEvalLooper):
             self._eval_loopers = (self.eval_loopers,)
         self.looper_metrics = {"Total Examples": 0}
         if self.log_interval is None:
