@@ -1,3 +1,7 @@
+# Box Training Methods
+
+Anonymized repo to accompany NeurIPS submission _Distinguishing Graphs via Sidigraphs: An Efficient Framework for Training Node Embedding Models_.
+
 ## Installation
 
 This repository makes use of submodules, to clone them you should use the `--recurse-submodules` flag, eg.
