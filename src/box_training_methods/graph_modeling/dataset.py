@@ -2,6 +2,7 @@ import os
 import math
 from pathlib import Path
 from time import time
+from collections import defaultdict
 from typing import *
 
 import attr
@@ -414,7 +415,7 @@ class RandomNegativeEdges:
 class HierarchicalNegativeEdges:
 
     edges: Tensor = attr.ib(validator=_validate_edge_tensor)
-    sampling_strategy: str = "exact"  # "uniform", "descendants"
+    sampling_strategy: str = "uniform"  # "exact", "descendants"
     negative_ratio: int = 16
     cache_dir: str = ""
     cache_only: bool = False
@@ -550,24 +551,6 @@ class HierarchicalNegativeEdges:
 
         return negative_roots
 
-    ## CONTAINS REDUNDANT COMPUTATIONS
-    # def precompute_negatives_for_node(self, node):
-    # 
-    #     node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})
-    #     descendants_of_node = set(self.A_[torch.tensor([node])].nonzero()[1])
-    #     children_of_node = set(self.A[torch.tensor([node])].nonzero()[1])
-    #     positives = node_and_ancestors.union(descendants_of_node)
-    #     negatives = self.nodes.difference(positives).union(children_of_node)
-    # 
-    #     # mask out the positives from TC-adjacency-matrix
-    #     A__ = self.A_.copy()
-    #     A__[torch.tensor(list(positives))] = 0
-    # 
-    #     # remove the non-roots (i.e. non-zero column indices) from the negatives
-    #     negative_roots = negatives.difference(set(A__.nonzero()[1]))
-    #
-    #     return sorted(list(negative_roots))
-    
     def precompute_negatives_for_node(self, node):
 
         node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})
@@ -606,6 +589,96 @@ class HierarchicalNegativeEdges:
             ancestors_for_node = set(self.A_[:, node].nonzero()[0])
             with open(os.path.join(cache_dir, f'{node}-ancestors.pkl'), 'wb') as f:
                 pickle.dump(ancestors_for_node, f)
+
+
+@attr.s(auto_attribs=True)
+class HierarchyAwareNegativeEdges:
+
+    edges: Tensor = attr.ib(validator=_validate_edge_tensor)
+    aggressive_pruning: bool = False
+    # TODO currently the _strategy is "uniform"; do we want "exact" or other variations for our experiments?
+    negative_ratio: int = 16
+
+    def __attrs_post_init__(self):
+
+        self._device = self.edges.device
+
+        self.G = nx.DiGraph()
+        self.G.add_edges_from((self.edges).tolist()) # assume nodes are numbered contiguously 0 through #nodes
+
+        self.hans_tail2heads = self.compute_hans_tail2heads()
+        self.hans_head2tails = self.invert_view(self.hans_tail2heads)
+        if self.aggressive_pruning:
+            self.aggr_head2tails = self.compute_aggr_head2tails()
+            self.aggr_tail2heads = self.invert_view(self.aggr_head2tails)
+
+    def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
+        """
+        Return negative edges for each positive edge.
+
+        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the head
+            node index and [...,1] is the tail node index.
+        :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
+        """
+
+        device = positive_edges.device
+
+        tails = positive_edges[..., 1]
+        negative_candidates = self.negative_roots[tails].long().to(device)
+
+        # TODO
+
+    # ------------- HANS -------------------------
+    def compute_hans_tail2heads(self):
+        hans_tail2heads = defaultdict(list)
+        for tail in self.G.nodes:
+            negative_heads_mres = self.hans_negative_heads_for_tail(tail)
+            hans_tail2heads[tail].extend(negative_heads_mres)
+        return hans_tail2heads
+
+    def hans_negative_heads_for_tail(self, tail):
+        tail_and_ancestors = {tail} | nx.ancestors(self.G, tail)
+        negative_heads = set(self.G.nodes).difference(tail_and_ancestors)
+        G_negative_heads = nx.induced_subgraph(self.G, negative_heads)
+        negative_heads_mres = [h for h in negative_heads if G_negative_heads.in_degree(h) == 0]
+        return negative_heads_mres
+    # --------------------------------------------
+    
+    # ------------- AGGRESSIVE PRUNING -----------
+    def compute_aggr_head2tails(self):
+
+        assert hasattr(self, "hans_head2tails")  # relies on previous computations
+
+        aggr_head2tails = defaultdict(list)
+        for h, tails_h in self.hans_head2tails.items():
+            G_tails_h = nx.induced_subgraph(self.G, tails_h)  # subgraph of G induced by tails corresponding to head h in hans edges
+            tails_h_star = [t for t in tails_h if G_tails_h.out_degree(t) == 0]  # keep only terminals of tails-induced subgraph
+            aggr_head2tails[h] = tails_h_star
+        return aggr_head2tails
+    # --------------------------------------------
+
+    @staticmethod
+    def invert_view(head2tails):
+
+        tail2heads = {}
+        for k,v in head2tails.items():
+            for x in v:
+                tail2heads.setdefault(x, []).append(k)
+        return tail2heads
+
+    @staticmethod
+    def create_packed_padded_matrix_for_sampling(head2tails):
+        pass
+
+    @property
+    def device(self):
+        return self._device
+
+    def to(self, device: Union[str, torch.device]):
+        self._device = device
+        self.edges = self.edges.to(device)
+        self.negative_roots = self.negative_roots.to(device)
+        return self
 
 
 @attr.s(auto_attribs=True)
@@ -658,23 +731,31 @@ class GraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    edges = [(0,1), (0,2), (1,3), (1,4), (2,5), (2,6), (3,7), (4,7), (4,8), (5,8)]
+    # edges = [(0,1), (0,2), (1,3), (1,4), (2,5), (2,6), (3,7), (4,7), (4,8), (5,8)]
 
+    # G = nx.DiGraph()
+    # G.add_edges_from(edges)
+    # HNE = HierarchicalNegativeEdges(
+    #     edges=torch.tensor(list(G.edges)), sampling_strategy="uniform"
+    # )
+
+    # G_tr = nx.transitive_reduction(G)
+    # HNE_tr = HierarchicalNegativeEdges(
+    #     edges=torch.tensor(list(G_tr.edges)), sampling_strategy="uniform"
+    # )
+
+    # G_tc = nx.transitive_reduction(G)
+    # HNE_tc = HierarchicalNegativeEdges(
+    #     edges=torch.tensor(list(G_tc.edges)), sampling_strategy="uniform"
+    # )
+
+    # assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)
+    # assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
+    
+    edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
     G = nx.DiGraph()
     G.add_edges_from(edges)
-    HNE = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G.edges)), sampling_strategy="uniform"
-    )
 
-    G_tr = nx.transitive_reduction(G)
-    HNE_tr = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G_tr.edges)), sampling_strategy="uniform"
-    )
-
-    G_tc = nx.transitive_reduction(G)
-    HNE_tc = HierarchicalNegativeEdges(
-        edges=torch.tensor(list(G_tc.edges)), sampling_strategy="uniform"
-    )
-
-    assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)
-    assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
+    HANS = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
+    
+    breakpoint()
