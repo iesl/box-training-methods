@@ -606,11 +606,16 @@ class HierarchyAwareNegativeEdges:
         self.G = nx.DiGraph()
         self.G.add_edges_from((self.edges).tolist()) # assume nodes are numbered contiguously 0 through #nodes
 
-        self.hans_tail2heads = self.compute_hans_tail2heads()
-        self.hans_head2tails = self.invert_view(self.hans_tail2heads)
-        if self.aggressive_pruning:
-            self.aggr_head2tails = self.compute_aggr_head2tails()
-            self.aggr_tail2heads = self.invert_view(self.aggr_head2tails)
+        self.hans_tail2heads_dict = self.compute_hans_tail2heads()
+        self.hans_head2tails_dict = self.invert_view(self.hans_tail2heads_dict)
+        self.aggr_head2tails_dict = self.compute_aggr_head2tails()
+        self.aggr_tail2heads_dict = self.invert_view(self.aggr_head2tails_dict)
+
+        # matrices for sampling, depending on hans/aggressive and head-/tail-oriented options
+        self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
+        self.hans_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_head2tails_dict)
+        self.aggr_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_head2tails_dict)
+        self.aggr_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_tail2heads_dict)
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
@@ -630,11 +635,11 @@ class HierarchyAwareNegativeEdges:
 
     # ------------- HANS -------------------------
     def compute_hans_tail2heads(self):
-        hans_tail2heads = defaultdict(list)
+        hans_tail2heads_dict = defaultdict(list)
         for tail in self.G.nodes:
             negative_heads_mres = self.hans_negative_heads_for_tail(tail)
-            hans_tail2heads[tail].extend(negative_heads_mres)
-        return hans_tail2heads
+            hans_tail2heads_dict[tail].extend(negative_heads_mres)
+        return hans_tail2heads_dict
 
     def hans_negative_heads_for_tail(self, tail):
         tail_and_ancestors = {tail} | nx.ancestors(self.G, tail)
@@ -647,10 +652,10 @@ class HierarchyAwareNegativeEdges:
     # ------------- AGGRESSIVE PRUNING -----------
     def compute_aggr_head2tails(self):
 
-        assert hasattr(self, "hans_head2tails")  # relies on previous computations
+        assert hasattr(self, "hans_head2tails_dict")  # relies on previous computations
 
         aggr_head2tails = defaultdict(list)
-        for h, tails_h in self.hans_head2tails.items():
+        for h, tails_h in self.hans_head2tails_dict.items():
             G_tails_h = nx.induced_subgraph(self.G, tails_h)  # subgraph of G induced by tails corresponding to head h in hans edges
             tails_h_star = [t for t in tails_h if G_tails_h.out_degree(t) == 0]  # keep only terminals of tails-induced subgraph
             aggr_head2tails[h] = tails_h_star
@@ -658,17 +663,19 @@ class HierarchyAwareNegativeEdges:
     # --------------------------------------------
 
     @staticmethod
-    def invert_view(head2tails):
+    def invert_view(x_to_Y):
+        y_to_X = {}
+        for x,Y in x_to_Y.items():
+            for y in Y:
+                y_to_X.setdefault(y, []).append(x)
+        return y_to_X
 
-        tail2heads = {}
-        for k,v in head2tails.items():
-            for x in v:
-                tail2heads.setdefault(x, []).append(k)
-        return tail2heads
-
-    @staticmethod
-    def create_packed_padded_matrix_for_sampling(head2tails):
-        pass
+    def create_packed_padded_matrix_for_sampling(self, x_to_Y):
+        PAD = len(self.G.nodes)
+        sequences = [torch.tensor(x_to_Y.get(h, [PAD])) for h in sorted(self.G.nodes)]
+        packed_sequence = pack_sequence(sequences, enforce_sorted=False)
+        Y = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=PAD)
+        return Y
 
     @property
     def device(self):
