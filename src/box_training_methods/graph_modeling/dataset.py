@@ -674,7 +674,7 @@ class HierarchyAwareNegativeEdges:
         PAD = len(self.G.nodes)
         sequences = [torch.tensor(x_to_Y.get(h, [PAD])) for h in sorted(self.G.nodes)]
         packed_sequence = pack_sequence(sequences, enforce_sorted=False)
-        Y = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=PAD)
+        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=PAD)
         return Y
 
     @property
