@@ -16,7 +16,7 @@ from torch.nn import Module
 from torch.utils.data import DataLoader
 from tqdm.autonotebook import trange, tqdm
 
-import torchmetrics
+# import torchmetrics
 from box_training_methods.graph_modeling.metrics.mlc_metrics import MeanAvgPrecision, MicroAvgPrecision
 
 from pytorch_utils.exceptions import StopLoopingException

@@ -34,6 +34,7 @@ __all__ = [
     "RandomEdges",
     "RandomNegativeEdges",
     "HierarchicalNegativeEdges",
+    "HierarchyAwareNegativeEdges",
     "GraphDataset",
 ]
 
@@ -606,60 +607,60 @@ class HierarchyAwareNegativeEdges:
         self.G = nx.DiGraph()
         self.G.add_edges_from((self.edges).tolist()) # assume nodes are numbered contiguously 0 through #nodes
 
-        self.hans_tail2heads_dict = self.compute_hans_tail2heads()
-        self.hans_head2tails_dict = self.invert_view(self.hans_tail2heads_dict)
-        self.aggr_head2tails_dict = self.compute_aggr_head2tails()
-        self.aggr_tail2heads_dict = self.invert_view(self.aggr_head2tails_dict)
+        self.hans_head2tails_dict = self.compute_hans_head2tails()
+        self.hans_tail2heads_dict = self.invert_view(self.hans_head2tails_dict)
+        self.aggr_tail2heads_dict = self.compute_aggr_tail2heads()
+        self.aggr_head2tails_dict = self.invert_view(self.aggr_tail2heads_dict)
 
-        # matrices for sampling, depending on hans/aggressive and head-/tail-oriented options
-        self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
+        # matrices for sampling, depending on hans/aggressive and tail-/head-oriented options
         self.hans_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_head2tails_dict)
-        self.aggr_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_head2tails_dict)
+        self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
         self.aggr_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_tail2heads_dict)
+        self.aggr_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_head2tails_dict)
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
         Return negative edges for each positive edge.
 
-        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the head
-            node index and [...,1] is the tail node index.
+        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the tail
+            node index and [...,1] is the head node index.
         :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
         """
 
         device = positive_edges.device
 
-        tails = positive_edges[..., 1]
-        negative_candidates = self.negative_roots[tails].long().to(device)
+        heads = positive_edges[..., 1]
+        negative_candidates = self.negative_roots[heads].long().to(device)
 
         # TODO
 
     # ------------- HANS -------------------------
-    def compute_hans_tail2heads(self):
-        hans_tail2heads_dict = defaultdict(list)
-        for tail in self.G.nodes:
-            negative_heads_mres = self.hans_negative_heads_for_tail(tail)
-            hans_tail2heads_dict[tail].extend(negative_heads_mres)
-        return hans_tail2heads_dict
+    def compute_hans_head2tails(self):
+        hans_head2tails_dict = defaultdict(list)
+        for head in self.G.nodes:
+            negative_tails_mres = self.hans_negative_tails_for_head(head)
+            hans_head2tails_dict[head].extend(negative_tails_mres)
+        return hans_head2tails_dict
 
-    def hans_negative_heads_for_tail(self, tail):
-        tail_and_ancestors = {tail} | nx.ancestors(self.G, tail)
-        negative_heads = set(self.G.nodes).difference(tail_and_ancestors)
-        G_negative_heads = nx.induced_subgraph(self.G, negative_heads)
-        negative_heads_mres = [h for h in negative_heads if G_negative_heads.in_degree(h) == 0]
-        return negative_heads_mres
+    def hans_negative_tails_for_head(self, head):
+        head_and_ancestors = {head} | nx.ancestors(self.G, head)
+        negative_tails = set(self.G.nodes).difference(head_and_ancestors)
+        G_negative_tails = nx.induced_subgraph(self.G, negative_tails)
+        negative_tails_mres = [h for h in negative_tails if G_negative_tails.in_degree(h) == 0]
+        return negative_tails_mres
     # --------------------------------------------
     
     # ------------- AGGRESSIVE PRUNING -----------
-    def compute_aggr_head2tails(self):
+    def compute_aggr_tail2heads(self):
 
-        assert hasattr(self, "hans_head2tails_dict")  # relies on previous computations
+        assert hasattr(self, "hans_tail2heads_dict")  # relies on previous computations
 
-        aggr_head2tails = defaultdict(list)
-        for h, tails_h in self.hans_head2tails_dict.items():
-            G_tails_h = nx.induced_subgraph(self.G, tails_h)  # subgraph of G induced by tails corresponding to head h in hans edges
-            tails_h_star = [t for t in tails_h if G_tails_h.out_degree(t) == 0]  # keep only terminals of tails-induced subgraph
-            aggr_head2tails[h] = tails_h_star
-        return aggr_head2tails
+        aggr_tail2heads = defaultdict(list)
+        for h, heads_h in self.hans_tail2heads_dict.items():
+            G_heads_h = nx.induced_subgraph(self.G, heads_h)  # subgraph of G induced by heads corresponding to tail h in hans edges
+            heads_h_star = [t for t in heads_h if G_heads_h.out_degree(t) == 0]  # keep only terminals of heads-induced subgraph
+            aggr_tail2heads[h] = heads_h_star
+        return aggr_tail2heads
     # --------------------------------------------
 
     @staticmethod
@@ -676,16 +677,6 @@ class HierarchyAwareNegativeEdges:
         packed_sequence = pack_sequence(sequences, enforce_sorted=False)
         Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=PAD)
         return Y
-
-    @property
-    def device(self):
-        return self._device
-
-    def to(self, device: Union[str, torch.device]):
-        self._device = device
-        self.edges = self.edges.to(device)
-        self.negative_roots = self.negative_roots.to(device)
-        return self
 
 
 @attr.s(auto_attribs=True)

@@ -11,14 +11,14 @@ setup(
     package_dir={"": "src"},
     description="Scripts to generate graphs, train and evaluate graph representations",
     install_requires=[
-        "Click>=7.1.2",
-        "networkx==2.8.8",
+        "Click",#"Click>=7.1.2",
+        "networkx",# "networkx==2.8.8",
         "scipy",
         "scikit-learn",
         "numpy",
         "xopen",
         "toml",
-        "torch==1.11.0", # breaks with 
+        # "torch==1.11.0", # breaks with 
         "pandas",
         "loguru",
         "tqdm",

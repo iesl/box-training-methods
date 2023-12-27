@@ -310,7 +310,7 @@ def train_final(**config):
         'constrain_deltas_fn': 'sqr',
         'undirected': None,
     }
-    graphs_dir = '/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/data/graphs13/'
+    graphs_dir = '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/'
     if config['model_type'] == 'tbox':
         final_config['model_type'] = 'tbox'
         final_config['learning_rate'] = 0.2

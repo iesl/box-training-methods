@@ -48,6 +48,7 @@ from .dataset import (
     edges_and_num_nodes_from_npz,
     RandomNegativeEdges,
     HierarchicalNegativeEdges,
+    HierarchyAwareNegativeEdges,
     GraphDataset,
 )
 from .loss import (
