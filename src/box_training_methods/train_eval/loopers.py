@@ -25,15 +25,15 @@ from pytorch_utils.training import IntervalConditional
 
 from box_training_methods.metrics import *
 
-### VISUALIZATION IMPORTS ONLY
-from box_training_methods.visualization.plot_2d_tbox import plot_2d_tbox
-from box_training_methods.models.box import TBox
-from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from_npz, create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
-neg_sampler_obj_to_str = {
-    RandomNegativeEdges: "random",
-    HierarchicalNegativeEdges: "hierarchical"
-}
-###
+# ### VISUALIZATION IMPORTS ONLY
+# from box_training_methods.visualization.plot_2d_tbox import plot_2d_tbox
+# from box_training_methods.models.box import TBox
+# from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from_npz, create_positive_edges_from_tails, RandomNegativeEdges, HierarchicalNegativeEdges
+# neg_sampler_obj_to_str = {
+#     RandomNegativeEdges: "random",
+#     HierarchicalNegativeEdges: "hierarchical"
+# }
+# ###
 
 
 __all__ = [
@@ -79,7 +79,7 @@ class GraphModelingTrainLooper:
     def loop(self, epochs: int):
         try:
             self.running_losses = []
-            box_collection = []
+            # box_collection = []
             for epoch in trange(epochs, desc=f"[{self.name}] Epochs"):
                 self.model.train()
                 with torch.enable_grad():
@@ -91,16 +91,16 @@ class GraphModelingTrainLooper:
                     for eval_looper in self.eval_loopers:
                         eval_looper.loop(epoch=epoch, save_dir=self.save_model.run_dir)
 
-                    # 2D TBOX VISUALIZATION INFO
-                    if isinstance(self.model, TBox):
-                        box_collection.append(torch.clone(self.model.boxes.detach()))
+                    # # 2D TBOX VISUALIZATION INFO
+                    # if isinstance(self.model, TBox):
+                    #     box_collection.append(torch.clone(self.model.boxes.detach()))
 
-            # VISUALIZE TBOX IN 2D
-            if isinstance(self.model, TBox):
-                plot_2d_tbox(box_collection=torch.stack(box_collection),
-                                negative_sampler=neg_sampler_obj_to_str[type(self.dl.dataset.negative_sampler)],
-                                lr=self.opt.param_groups[0]['lr'],
-                                negative_sampling_strategy=self.dl.dataset.negative_sampler.sampling_strategy if isinstance(self.dl.dataset.negative_sampler, HierarchicalNegativeEdges) else None)
+            # # VISUALIZE TBOX IN 2D
+            # if isinstance(self.model, TBox):
+            #     plot_2d_tbox(box_collection=torch.stack(box_collection),
+            #                     negative_sampler=neg_sampler_obj_to_str[type(self.dl.dataset.negative_sampler)],
+            #                     lr=self.opt.param_groups[0]['lr'],
+            #                     negative_sampling_strategy=self.dl.dataset.negative_sampler.sampling_strategy if isinstance(self.dl.dataset.negative_sampler, HierarchicalNegativeEdges) else None)
         except StopLoopingException as e:
             logger.warning(str(e))
         finally:
