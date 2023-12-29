@@ -47,7 +47,6 @@ from .dataset import (
     edges_from_tsv,
     edges_and_num_nodes_from_npz,
     RandomNegativeEdges,
-    HierarchicalNegativeEdges,
     HierarchyAwareNegativeEdges,
     GraphDataset,
 )
@@ -296,11 +295,13 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
                 permutation_option=config["negatives_permutation_option"],
             )
         elif config["negative_sampler"] == "hierarchical":
-            negative_sampler = HierarchicalNegativeEdges(
+            negative_sampler = HierarchyAwareNegativeEdges(
                 edges=training_edges,
+                aggressive_pruning=False,
                 negative_ratio=config["negative_ratio"],
-                sampling_strategy=config["hierarchical_negative_sampling_strategy"],
-                cache_dir=config["data_path"] + ".hns",
+                cache_dir=os.path.dirname(npz_file),
+                graph_name=selected_graph_name,
+                load_from_cache=True
             )
         else:
             raise NotImplementedError

@@ -413,192 +413,14 @@ class RandomNegativeEdges:
 
 
 @attr.s(auto_attribs=True)
-class HierarchicalNegativeEdges:
-
-    edges: Tensor = attr.ib(validator=_validate_edge_tensor)
-    sampling_strategy: str = "uniform"  # "exact", "descendants"
-    negative_ratio: int = 16
-    cache_dir: str = ""
-    cache_only: bool = False
-
-    def __attrs_post_init__(self):
-
-        self._device = self.edges.device
-
-        G = nx.DiGraph()
-
-        # assume nodes are numbered contiguously 0 through #nodes
-        G.add_edges_from((self.edges).tolist())
-        self.nodes = set(G.nodes)
-
-        A = nx.adjacency_matrix(G, nodelist=sorted(list(G.nodes)))
-
-        # TODO calculate max depth (max # edges) via dfs
-        self.max_depth = 100
-        A_ = A.copy()
-        for _ in range(self.max_depth):
-            A_ += A_ @ A
-        A_[A_ > 0] = 1
-
-        self.A = A
-        self.A_ = csr_matrix(A_)
-        self.G = G
-
-        self.EMB_PAD = len(self.nodes)
-
-        if self.sampling_strategy != "exact":
-
-            if self.sampling_strategy == "uniform":
-                node_to_weight = {n: 1 for n in G.nodes}
-            elif self.sampling_strategy == "descendants":
-                if os.path.exists(self.cache_dir):
-                    logger.info("Loading negative weights from cache...")
-                    with open(os.path.join(self.cache_dir, "node_to_num_descendants.pkl"), "rb") as f:
-                        node_to_weight = pickle.load(f)
-                else:
-                    # TODO this is a very inefficient way to collect this info, do it in a single traversal
-                    node_to_weight = {n: len(nx.descendants(G, n)) for n in G.nodes}
-            # elif self.sampling_strategy == "node_depth":
-            #     # calculate node depths (used as weights)
-            #     # root nodes are at depth 1, successive levels at depths 2, 3, 4...
-            #     # FIXME node to depth dict for dag with multiple roots (the line below assumes there's a single root)
-            #     # node_to_weight = {n: len(p) for n, p in nx.shortest_path(G, 0).items()}
-            #     raise NotImplementedError
-            else:
-                raise NotImplementedError
-
-            # Weights can't have row of all zeros, because WeightedRandomSampler will error on torch.multinomial with all zeros
-            # This is why we set the weight for EMB_PAD to be a tiny number instead of 0, in case a node has no other
-            #  negative candidates to sample from.
-            node_to_weight = torch.FloatTensor([node_to_weight[k] for k in sorted(list(self.nodes))]).unsqueeze(-1)
-            node_to_weight = torch.cat([node_to_weight, torch.tensor([[1e-9]])], dim=0)
-            self.weights = torch.nn.Embedding.from_pretrained(node_to_weight, freeze=True, padding_idx=self.EMB_PAD)
-
-        if not self.cache_only:
-            t0 = time()
-            self.negative_roots = self.precompute_negatives()
-            logger.info(f"Time to precompute negative roots: {time() - t0}")
-
-    def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
-        """
-        Return negative edges for each positive edge.
-
-        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the head
-            node index and [...,1] is the tail node index.
-        :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
-        """
-
-        device = positive_edges.device
-
-        tails = positive_edges[..., 1]
-        negative_candidates = self.negative_roots[tails].long().to(device)
-
-        # Implement a policy that returns all negative candidates w/o repetition.
-        # This will require a mask to be used inside TBox forward method.
-        if self.sampling_strategy == "exact":
-
-            tails = tails.unsqueeze(-1).expand(-1, negative_candidates.shape[-1])
-            negative_edges = torch.stack([negative_candidates, tails], dim=-1)
-            padding_mask = (negative_candidates != self.EMB_PAD).long().unsqueeze(-1).expand(-1, -1, 2)
-
-            # pad with something that can index model.boxes (we already have mask for it so doesn't matter what
-            # it is so long as it doesn't cause IndexError)
-            negative_edges[negative_edges == self.EMB_PAD] = 0
-
-            # return padding mask concatenated to negative_edges,
-            # hardcode TBox to interpret negative edges correctly
-            return torch.cat([negative_edges, padding_mask], dim=1)
-
-        else:
-
-            negative_candidates_weights = self.weights.to(device)(negative_candidates).squeeze()
-            
-            wrs = WeightedRandomSampler(weights=negative_candidates_weights, num_samples=self.negative_ratio, replacement=True)
-            wrs = list(wrs)
-            negative_idxs = torch.tensor(wrs).to(device)
-            try:
-                negative_nodes = torch.gather(negative_candidates, -1, negative_idxs)
-            except RuntimeError:
-                # FIXME this happens when we have a leftover batch of one instance
-                negative_nodes = torch.gather(negative_candidates, -1, negative_idxs.unsqueeze(dim=0))
-
-            # FIXME for nodes with no HNS candidates, this will result in non-hierarchical negative_edges which may impact training
-            #  fix this with masking
-            negative_nodes[negative_nodes == self.EMB_PAD] = -1
-
-            tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
-            negative_edges = torch.stack([negative_nodes, tails], dim=-1)
-            return negative_edges
-
-    def precompute_negatives(self):
-
-        if os.path.exists(self.cache_dir):
-            logger.info("Loading negative roots from cache...")
-            negative_roots = torch.load(os.path.join(self.cache_dir, "negative_roots.pt"))
-            return negative_roots
-
-        negative_roots = []
-        for node in range(self.A_.shape[0]):
-
-            negative_roots_for_node = self.precompute_negatives_for_node(node)
-            if len(negative_roots_for_node) == 0:
-                negative_roots_for_node = [self.EMB_PAD]
-
-            negative_roots.append(torch.tensor(negative_roots_for_node))
-
-        negative_roots, _ = pad_packed_sequence(sequence=pack_sequence(negative_roots, enforce_sorted=False),
-                                                batch_first=True,
-                                                padding_value=self.EMB_PAD)
-
-        return negative_roots
-
-    def precompute_negatives_for_node(self, node):
-
-        node_and_ancestors = set(self.A_[:, node].nonzero()[0]).union({node})
-        negatives = self.nodes.difference(node_and_ancestors)
-
-        # mask out the positives from TC-adjacency-matrix
-        A__ = self.A_.copy()
-        A__[torch.tensor(list(node_and_ancestors))] = 0
-
-        # remove the non-roots (i.e. non-zero column indices)
-        negative_non_roots = set(A__.nonzero()[1])
-        negative_roots = negatives.difference(negative_non_roots)
-
-        return sorted(list(negative_roots))
-
-    @property
-    def device(self):
-        return self._device
-
-    def to(self, device: Union[str, torch.device]):
-        self._device = device
-        self.edges = self.edges.to(device)
-        self.negative_roots = self.negative_roots.to(device)
-        return self
-
-    def cache_negatives(self, cache_dir: Optional[str] = None):
-
-        for node in range(self.A_.shape[0]):
-            negatives_for_node = set(self.precompute_negatives_for_node(node))        
-            with open(os.path.join(cache_dir, f'{node}-negatives.pkl'), 'wb') as f:
-                pickle.dump(negatives_for_node, f)
-
-    def cache_ancestors(self, cache_dir: Optional[str] = None):
-        
-        for node in range(self.A_.shape[0]):
-            ancestors_for_node = set(self.A_[:, node].nonzero()[0])
-            with open(os.path.join(cache_dir, f'{node}-ancestors.pkl'), 'wb') as f:
-                pickle.dump(ancestors_for_node, f)
-
-
-@attr.s(auto_attribs=True)
 class HierarchyAwareNegativeEdges:
 
     edges: Tensor = attr.ib(validator=_validate_edge_tensor)
     aggressive_pruning: bool = False
-    # TODO currently the _strategy is "uniform"; do we want "exact" or other variations for our experiments?
     negative_ratio: int = 16
+    cache_dir: str = ""
+    graph_name: str = ""
+    load_from_cache: bool = False
 
     def __attrs_post_init__(self):
 
@@ -606,17 +428,27 @@ class HierarchyAwareNegativeEdges:
 
         self.G = nx.DiGraph()
         self.G.add_edges_from((self.edges).tolist()) # assume nodes are numbered contiguously 0 through #nodes
+        self.PAD = len(self.G.nodes)
 
-        self.hans_head2tails_dict = self.compute_hans_head2tails()
-        self.hans_tail2heads_dict = self.invert_view(self.hans_head2tails_dict)
-        self.aggr_tail2heads_dict = self.compute_aggr_tail2heads()
-        self.aggr_head2tails_dict = self.invert_view(self.aggr_tail2heads_dict)
+        if self.load_from_cache:
+            torch.load()
+        
+        else:
+            self.hans_head2tails_dict = self.compute_hans_head2tails()
+            self.hans_tail2heads_dict = self.invert_view(self.hans_head2tails_dict)  # ✓
+            self.aggr_tail2heads_dict = self.compute_aggr_tail2heads()               # ✓
+            
+            # matrices for sampling, depending on hans/aggressive and tail-/head-oriented options
+            self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
+            self.aggr_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_tail2heads_dict)
 
-        # matrices for sampling, depending on hans/aggressive and tail-/head-oriented options
-        self.hans_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_head2tails_dict)
-        self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
-        self.aggr_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_tail2heads_dict)
-        self.aggr_head2tails_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_head2tails_dict)
+        if self.aggressive_pruning:
+            self.tail2heads_matrix = self.aggr_tail2heads_matrix
+        else:
+            self.tail2heads_matrix = self.hans_tail2heads_matrix
+        weights = torch.ones(shape=(len(self.G.nodes), 1), dtype=torch.float)
+        weights = torch.vstack([weights, torch.tensor([1e-9])])
+        self.weights = torch.nn.Embedding.from_pretrained(weights, freeze=True, padding_idx=self.PAD)
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
@@ -629,12 +461,27 @@ class HierarchyAwareNegativeEdges:
 
         device = positive_edges.device
 
-        heads = positive_edges[..., 1]
-        negative_candidates = self.negative_roots[heads].long().to(device)
+        tails = positive_edges[..., 0]
+        negative_heads = self.tail2heads_matrix[tails].long().to(device)
+        negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
+        
+        wrs = WeightedRandomSampler(weights=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
+        wrs = list(wrs)
+        negative_idxs = torch.tensor(wrs).to(device)
+        try:
+            negative_heads = torch.gather(negative_heads, -1, negative_idxs)
+        except RuntimeError:
+            # FIXME this happens when we have a leftover batch of one instance
+            negative_heads = torch.gather(negative_heads, -1, negative_idxs.unsqueeze(dim=0))
 
-        # TODO
+        # FIXME for nodes with no HNS candidates, this will result in non-hierarchical negative_edges which may impact training
+        #  fix this with masking
+        negative_heads[negative_heads == self.PAD] = -1
 
-    # ------------- HANS -------------------------
+        tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
+        negative_edges = torch.stack([tails, negative_heads], dim=-1)
+        return negative_edges
+
     def compute_hans_head2tails(self):
         hans_head2tails_dict = defaultdict(list)
         for head in self.G.nodes:
@@ -648,9 +495,7 @@ class HierarchyAwareNegativeEdges:
         G_negative_tails = nx.induced_subgraph(self.G, negative_tails)
         negative_tails_mres = [h for h in negative_tails if G_negative_tails.in_degree(h) == 0]
         return negative_tails_mres
-    # --------------------------------------------
-    
-    # ------------- AGGRESSIVE PRUNING -----------
+
     def compute_aggr_tail2heads(self):
 
         assert hasattr(self, "hans_tail2heads_dict")  # relies on previous computations
@@ -661,7 +506,6 @@ class HierarchyAwareNegativeEdges:
             heads_h_star = [t for t in heads_h if G_heads_h.out_degree(t) == 0]  # keep only terminals of heads-induced subgraph
             aggr_tail2heads[h] = heads_h_star
         return aggr_tail2heads
-    # --------------------------------------------
 
     @staticmethod
     def invert_view(x_to_Y):
@@ -672,11 +516,30 @@ class HierarchyAwareNegativeEdges:
         return y_to_X
 
     def create_packed_padded_matrix_for_sampling(self, x_to_Y):
-        PAD = len(self.G.nodes)
-        sequences = [torch.tensor(x_to_Y.get(h, [PAD])) for h in sorted(self.G.nodes)]
+        sequences = [torch.tensor(x_to_Y.get(h, [self.PAD])) for h in sorted(self.G.nodes)]
         packed_sequence = pack_sequence(sequences, enforce_sorted=False)
-        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=PAD)
+        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=self.PAD)
         return Y
+    
+    def cache(self):
+        torch.save(self.hans_tail2heads_matrix,
+                   os.path.join(self.cache_dir, self.graph_name + ".hans.pt"))
+        torch.save(self.aggr_tail2heads_matrix,
+                   os.path.join(self.cache_dir, self.graph_name + ".aggr.pt"))
+    
+    def load(self):
+        self.hans_tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".hans.pt"))
+        self.aggr_tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".aggr.pt"))
+
+    @property
+    def device(self):
+        return self._device
+
+    def to(self, device: Union[str, torch.device]):
+        self._device = device
+        self.edges = self.edges.to(device)
+        self.tail2heads_matrix = self.tail2heads_matrix.to(device)
+        return self
 
 
 @attr.s(auto_attribs=True)
