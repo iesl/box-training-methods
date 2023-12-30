@@ -24,7 +24,7 @@ from pytorch_utils.loggers import Logger
 from pytorch_utils.training import IntervalConditional
 
 from box_training_methods.metrics import *
-from box_training_methods.graph_model.dataset import edges_and_num_nodes_from_npz
+from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from_npz
 
 # ### VISUALIZATION IMPORTS ONLY
 # from box_training_methods.visualization.plot_2d_tbox import plot_2d_tbox
