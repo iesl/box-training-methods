@@ -253,7 +253,6 @@ def eval():
     pass
 
 
-
 @click.command(context_settings=dict(show_default=True),)
 @click.option("--model_type", type=click.Choice(['tbox', 'vector_sim']), required=True, help="model type")
 @click.option("--graph_type", type=click.Choice([
@@ -410,4 +409,84 @@ def train_final(**config):
         final_config['wandb_name'] = f"final_run-{final_config['model_type']}"
     final_config['output_dir'] = None
     training(final_config)
+
+
+def parse_graph_npz_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True/4.npz
+    pieces = path.split("/")
+    graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1]
+    graph_hparams_desc = "|".join(graph_hparams.split("-"))
+    graph_hparams = [h.split("=") for h in graph_hparams.split("-")]
+    graph_hparams = {h[0]: h[1] for h in graph_hparams}
+    graph_tags = {
+        "graph_type": graph_type,
+        "graph_seed": graph_seed
+    }
+    graph_tags.update(graph_hparams)
+    graph_desc = f"{graph_type}|{graph_hparams_desc}|graph_seed={str(graph_seed)}"
+    return graph_tags, graph_desc
+
+
+@click.command(context_settings=dict(show_default=True),)
+@click.option(
+    "--data_path",
+    type=click.Path(),
+    help="directory or file with data",
+)
+@click.option(
+    "--learning_rate", type=float, default=0.01, help="learning rate",
+)
+@click.option(
+    "--negative_weight", type=float, default=0.9, help="weight of negative loss",
+)
+@click.option(
+    "--negative_ratio",
+    type=int,
+    default=128,
+    help="number of negative samples for each positive",
+)
+@click.option(
+    "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
+)
+def train_1(**config):
+    from .train import training
+    final_config = {
+        'task': 'graph_modeling',
+        'model_type': 'vector_sim',
+        'vector_separate_io': True,
+        'vector_use_bias': True,
+        'negative_sampler': 'random',
+        'negatives_permutation_option': 'none',
+        'sample_positive_edges_from_tc_or_tr': 'tc',    # TODO why is this not tr?
+        'dim': 64,
+        'log_batch_size': 9,
+        'log_eval_batch_size': 17,
+        'epochs': 40,
+        'patience': 1000,
+        'log_interval': 0.2,
+        'eval': True,
+        'cuda': True,
+        'save_predictions': False,
+        'wandb': True,
+        'save_model': False,
+        'save_prediction': False,
+        'undirected': None,
+        'output_dir': None,
+    }
     
+    graph_tags, graph_desc = parse_graph_npz_path(config['data_path'])
+
+    wandb_tags = [
+        'model_type=vector_sim',
+        'negative_sampler=random',
+        f'learning_rate={config["learning_rate"]}',
+        f'negative_weight={config["negative_weight"]}',
+        f'negative_ratio={config["negative_ratio"]}',
+        f'model_seed={config["seed"]}'
+    ]
+    for k, v in graph_tags.items():
+        wandb_tags.append('='.join([k, v]))
+    
+    final_config['wandb_tags'] = wandb_tags
+    final_config['wandb_name'] = f"vector_sim|random|{graph_desc}"
+
+    training(final_config)
