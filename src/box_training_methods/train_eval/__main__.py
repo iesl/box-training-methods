@@ -413,7 +413,7 @@ def train_final(**config):
 
 def parse_graph_npz_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True/4.npz
     pieces = path.split("/")
-    graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1]
+    graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1][:-len(".npz")]
     graph_hparams_desc = "|".join(graph_hparams.split("-"))
     graph_hparams = [h.split("=") for h in graph_hparams.split("-")]
     graph_hparams = {h[0]: h[1] for h in graph_hparams}
