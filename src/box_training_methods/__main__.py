@@ -17,7 +17,8 @@ main.add_command(eval, "eval")
 main.add_command(train_final, "train_final")
 
 # entrypoints for ICML 2024 experiments (4 different types of sweeps for model x negative sampling combinations)
-main.add_command(train_1, "train_1")  # vector_sim, random negative sampling
+main.add_command(train_vector_sim_random, "train_vector_sim_random")  # vector_sim, random negative sampling
+main.add_command(train_tbox, "train_tbox")  # tbox, both random and hierarchical negative sampling
 
 if __name__ == "__main__":
     main()

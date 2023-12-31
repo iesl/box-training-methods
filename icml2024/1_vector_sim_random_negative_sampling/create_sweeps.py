@@ -7,7 +7,7 @@ sweep_config_template = {
      "${env}",
      "${interpreter}",
      "${program}",
-     "train_1",
+     "train_vector_sim_random",
      "${args}" 
     ],
  "method": "bayes",
