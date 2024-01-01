@@ -473,6 +473,7 @@ def vector_sim_hyperparameter_tuning(**config):
         'sample_positive_edges_from_tc_or_tr': 'tc',
         'vector_separate_io': True,
         'vector_use_bias': True,
+        'negative_sampler': 'random',
     }
     final_config.update(sweep_specific_params)
     final_config.update(config)    
