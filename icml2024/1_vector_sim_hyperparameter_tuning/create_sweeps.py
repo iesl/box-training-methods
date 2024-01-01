@@ -100,6 +100,11 @@ def main(args):
 
 if __name__ == "__main__":
     
+    # -------------------------------------------------------------
+    # cd ./icml2024/1_vector_sim_hyperparameter_tuning/
+    # python3 create_sweeps.py --output_sweep_ids_file ./sweep_ids.txt
+    # -------------------------------------------------------------
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_sweep_ids_file", type=str, required=True,
                     default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/sweep_ids.txt",
