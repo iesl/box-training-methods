@@ -477,7 +477,7 @@ def vector_sim_hyperparameter_tuning(**config):
     final_config.update(sweep_specific_params)
     final_config.update(config)    
     graph_tags = parse_graph_npz_path(config['data_path'])
-    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items()]
+    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
@@ -522,7 +522,7 @@ def train_tbox(**config):
     final_config.update(sweep_specific_params)
     final_config.update(config)
     graph_tags = parse_graph_npz_path(config['data_path'])
-    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items()]
+    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
@@ -569,7 +569,7 @@ def train_vector_sim(**config):
     final_config.update(sweep_specific_params)
     final_config.update(config)
     graph_tags = parse_graph_npz_path(config['data_path'])
-    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items()]
+    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
