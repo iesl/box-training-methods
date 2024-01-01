@@ -465,7 +465,7 @@ BASE_CONFIG = {
 @click.option(
     "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
 )
-def train_vector_sim_random(**config):
+def vector_sim_hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
     sweep_specific_params = {
@@ -519,6 +519,53 @@ def train_tbox(**config):
         'learning_rate': 0.2,
         'negative_weight': 0.9
     }
+    final_config.update(sweep_specific_params)
+    final_config.update(config)
+    graph_tags = parse_graph_npz_path(config['data_path'])
+    wandb_tags = ["=".join([k, v]) for k, v in config.items()]
+    wandb_tags.extend(["=".join([k, v]) for k, v in sweep_specific_params.items()])
+    wandb_tags.extend(["=".join([k, v]) for k, v in graph_tags.items()])
+    final_config['wandb_tags'] = wandb_tags
+    training(final_config)
+
+
+@click.command(context_settings=dict(show_default=True),)
+@click.option(
+    "--data_path",
+    type=click.Path(),
+    help="directory or file with data",
+)
+@click.option(
+    "--negative_ratio",
+    type=int,
+    default=128,
+    help="number of negative samples for each positive",
+)
+@click.option(
+    "--negative_sampler",
+    type=str,
+    default="random",
+    help="whether to use RandomNegativeEdges or HierarchyAwareNegativeEdges"
+)
+@click.option(
+    "--sample_positive_edges_from_tc_or_tr",
+    type=click.Choice(['tc', 'tr']),
+    required=True,
+    help="sample positive edges from transitive closure or transitive reduction"
+)
+@click.option(
+    "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
+)
+def train_vector_sim(**config):
+    from .train import training
+    final_config = copy.deepcopy(BASE_CONFIG)
+    sweep_specific_params = {
+        'model_type': 'vector_sim',
+        'vector_separate_io': True,
+        'vector_use_bias': True,
+    }
+    # TODO get best learning_rate and negative_weight from json
+
     final_config.update(sweep_specific_params)
     final_config.update(config)
     graph_tags = parse_graph_npz_path(config['data_path'])

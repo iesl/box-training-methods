@@ -1,5 +1,6 @@
 import os
 import copy
+import argparse
 import wandb
 
 sweep_config_template = {
@@ -7,7 +8,7 @@ sweep_config_template = {
      "${env}",
      "${interpreter}",
      "${program}",
-     "train_vector_sim_random",
+     "vector_sim_hyperparameter_tuning",
      "${args}" 
     ],
  "method": "bayes",
@@ -56,6 +57,7 @@ graph_dir_paths = [
     "/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True"
 ]
 
+
 def parse_graph_dir_path(path):
     pieces = path.rstrip("/").split("/")
     graph_type, hparams = pieces[-2], pieces[-1]
@@ -69,23 +71,39 @@ def parse_graph_dir_path(path):
     desc = f"{graph_type} {hparams_desc}"
     return ret, desc
 
-sweep_ids = []
-for graph_dir_path in graph_dir_paths:
+
+def main(args):
+
+    sweep_ids = []
+    for graph_dir_path in graph_dir_paths:
+        
+        # get all graph random seed npz files for this graph
+        graph_npz_paths = []
+        for file in os.listdir(graph_dir_path):
+            if file.endswith(".npz"):
+                graph_npz_paths.append(os.path.join(graph_dir_path, file))
+
+        d, s = parse_graph_dir_path(graph_dir_path)
+        for negative_ratio in [4, 128]:
+            sweep_config = copy.deepcopy(sweep_config_template)
+            sweep_config["name"] = f"{s} negative_ratio={negative_ratio}"
+            sweep_config["parameters"]["data_path"]["values"] = graph_npz_paths
+            sweep_config["parameters"]["negative_ratio"]["values"] = [negative_ratio]
+            print(sweep_config)
+            id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
+            print(f"Created wandb sweep with id {id}")
+            sweep_ids.append(id)
+
+    with open(args.output_sweep_ids_file, "w") as f:
+        f.write("\n".join(sweep_ids))
+
+
+if __name__ == "__main__":
     
-    # get all graph random seed npz files for this graph
-    graph_npz_paths = []
-    for file in os.listdir(graph_dir_path):
-        if file.endswith(".npz"):
-            graph_npz_paths.append(os.path.join(graph_dir_path, file))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output_sweep_ids_file", type=str, required=True,
+                    default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/sweep_ids.txt",
+                    help="txt file to store sweep ids of created sweeps")
+    args = parser.parse_args()
 
-    d, s = parse_graph_dir_path(graph_dir_path)
-    sweep_config = copy.deepcopy(sweep_config_template)
-    sweep_config["name"] = s
-    sweep_config["parameters"]["data_path"]["values"] = graph_npz_paths
-    print(sweep_config)
-    id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
-    print(f"Created wandb sweep with id {id}")
-    sweep_ids.append(id)
-
-with open("/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_random_negative_sampling_sweeps/sweep_ids.txt", "w") as f:
-    f.write("\n".join(sweep_ids))
+    main(args)

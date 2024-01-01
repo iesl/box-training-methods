@@ -17,8 +17,9 @@ main.add_command(eval, "eval")
 main.add_command(train_final, "train_final")
 
 # entrypoints for ICML 2024 experiments (4 different types of sweeps for model x negative sampling combinations)
-main.add_command(train_vector_sim_random, "train_vector_sim_random")  # vector_sim, random negative sampling
+main.add_command(vector_sim_hyperparameter_tuning, "vector_sim_hyperparameter_tuning")  # vector_sim, random negative sampling sweep to determine best lr and nw per graph type
 main.add_command(train_tbox, "train_tbox")  # tbox, both random and hierarchical negative sampling
+main.add_command(train_vector_sim, "train_vector_sim")  # vector_sim, both random and hierarchical negative sampling, using best lr and nw values from train_vector_sim_hyperparameter_tuning sweep
 
 if __name__ == "__main__":
     main()
