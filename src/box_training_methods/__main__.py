@@ -2,7 +2,7 @@ import click
 
 # graph_modeling is the only task that needs to generate graphs, so treat graph_modeling.generate as top-level group
 from .graph_modeling.generate.__main__ import main as generate
-from .train_eval.__main__ import train, eval, train_final, train_1
+from .train_eval.__main__ import train, eval, train_final, vector_sim_hyperparameter_tuning, train_tbox, train_vector_sim
 
 
 @click.group()
