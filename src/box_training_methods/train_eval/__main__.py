@@ -1,4 +1,5 @@
 import click
+import json
 import copy
 from pathlib import Path
 
@@ -557,6 +558,9 @@ def train_tbox(**config):
 @click.option(
     "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
 )
+@click.option(
+    "--lr_nw_json", type=str, help="path to json storing graph type and negative ratio to best learning rate and negative weight"
+)
 def train_vector_sim(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
@@ -565,7 +569,19 @@ def train_vector_sim(**config):
         'vector_separate_io': True,
         'vector_use_bias': True,
     }
-    # TODO get best learning_rate and negative_weight from json
+
+    # get best learning_rate and negative_weight from json
+    with open(config["lr_nw_json"], "r") as f:
+        lr_nw_json = json.load(f)
+    del config["lr_nw_json"]
+    
+    graph_type, graph_hparams = config["data_path"].split("/")[-3:-1]
+    learning_rate = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_learning_rate']
+    negative_weight = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_negative_weight']
+    config.update({
+        "learning_rate": learning_rate,
+        "negative_weight": negative_weight,
+    })
 
     final_config.update(sweep_specific_params)
     final_config.update(config)

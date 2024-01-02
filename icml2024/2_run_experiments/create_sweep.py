@@ -10,8 +10,9 @@ def main(args):
         "${interpreter}",
         "${program}",
         f"train_{args.model}",      # train_tbox or train_vector_sim
-        "${args}" 
-        ],
+        "${args}",
+        "--lr_nw_json=/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json",
+    ],
     "method": "bayes",
     "metric": {
     "goal": "maximize",

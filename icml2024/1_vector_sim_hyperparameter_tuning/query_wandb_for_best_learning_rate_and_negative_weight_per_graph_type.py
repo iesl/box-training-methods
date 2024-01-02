@@ -10,13 +10,13 @@ def main(args):
 
     sweep_ids = [l.strip() for l in open(args.input_sweep_ids_file, "r").readlines()]
     
-    output_json = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))
+    output_json = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(float))))
     for sweep_id in sweep_ids:
         
         sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/{sweep_id}")
         runs = sweep.runs
         
-        sweep_graph_type, sweep_graph_hparams = sweep.config['parameters']['data_path']['values'][0].split('/')[-3:-2]
+        sweep_graph_type, sweep_graph_hparams = sweep.config['parameters']['data_path']['values'][0].split('/')[-3:-1]
         sweep_negative_ratio = sweep.config['parameters']['negative_ratio']['values'][0]
         
         # best_run = max(runs, key=lambda r: r.summary['[Eval] F1'])
@@ -25,14 +25,18 @@ def main(args):
         best_run_learning_rate = best_run_config['learning_rate']['value']
         best_run_negative_weight = best_run_config['negative_weight']['value']
         
-        output_json[sweep_graph_type][sweep_graph_hparams]['best_learning_rate'] = best_run_learning_rate
-        output_json[sweep_graph_type][sweep_graph_hparams]['best_negative_weight'] = best_run_negative_weight
+        output_json[sweep_graph_type][sweep_graph_hparams][f'negative_ratio={sweep_negative_ratio}']['best_learning_rate'] = best_run_learning_rate
+        output_json[sweep_graph_type][sweep_graph_hparams][f'negative_ratio={sweep_negative_ratio}']['best_negative_weight'] = best_run_negative_weight
 
     with open(args.output_json_file, "w") as f:
         json.dump(output_json, f, sort_keys=True, indent=4)
 
 
 if __name__ == "__main__":
+
+    # ----------—----------—----------—----------—
+    # python3 query_wandb_for_best_learning_rate_and_negative_weight_per_graph_type.py --input_sweep_ids_file ./sweep_ids.txt --output_json_file ./graph_type_to_best_learning_rate_and_negative_weight.json
+    # ----------—----------—----------—----------—
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_sweep_ids_file", type=str, required=True,

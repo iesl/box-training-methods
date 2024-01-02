@@ -17,6 +17,16 @@ Now launch agents to run the sweeps that have been created, in [Array Batch jobs
 sbatch --array=1-26 ./launch_agents.sh
 ```
 
+Finally, aggregate the best learning rate and negative weight from the sweeps and store in a json file, to be retrieved by the `vector_sim` sweeps for the following experiments:
+
+```
+python3 query_wandb_for_best_learning_rate_and_negative_weight_per_graph_type.py \
+--input_sweep_ids_file ./sweep_ids.txt \
+--output_json_file ./graph_type_to_best_learning_rate_and_negative_weight.json
+```
+
+This file gets utilized by the `train_vector_sim` entrypoint, which loads it and retrieves the corresponding learning rate and negative weight to use, depending on the run's hyperparameters.
+
 ## Run tbox experiments
 
 ## Run vector_sim experiments
