@@ -48,7 +48,10 @@ def training(config: Dict) -> None:
         run_dir = Path(".")
 
     if config["seed"] is None:
-        config["seed"] = random.randint(0, 2 ** 32)
+        if config["wandb"]:
+            config.update({"seed": random.randint(0, 2 ** 32)}, allow_val_change=True)
+        else:
+            config["seed"] = random.randint(0, 2 ** 32)
     torch.manual_seed(config["seed"])
     random.seed(config["seed"])
 
