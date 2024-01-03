@@ -413,15 +413,16 @@ def train_final(**config):
     training(final_config)
 
 
-def parse_graph_npz_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True/4.npz
-    pieces = path.split("/")
-    graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1][:-len(".npz")]
+def parse_graph_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True(/4.npz)
+    pieces = path.rstrip("/").split("/")
+    if path.endswith(".npz"):
+        graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1][:-len(".npz")]
+        graph_tags = {"graph_type": graph_type, "graph_seed": graph_seed}
+    else:
+        graph_type, graph_hparams = pieces[-2], pieces[-1]
+        graph_tags = {"graph_type": graph_type}
     graph_hparams = [h.split("=") for h in graph_hparams.split("-")]
     graph_hparams = {h[0]: h[1] for h in graph_hparams}
-    graph_tags = {
-        "graph_type": graph_type,
-        "graph_seed": graph_seed
-    }
     graph_tags.update(graph_hparams)
     return graph_tags
 
@@ -463,9 +464,6 @@ BASE_CONFIG = {
 @click.option(
     "--negative_weight", type=float, default=0.9, help="weight of negative loss",
 )
-@click.option(
-    "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
-)
 def vector_sim_hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
@@ -478,7 +476,7 @@ def vector_sim_hyperparameter_tuning(**config):
     }
     final_config.update(sweep_specific_params)
     final_config.update(config)    
-    graph_tags = parse_graph_npz_path(config['data_path'])
+    graph_tags = parse_graph_path(config['data_path'])
     wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
@@ -509,9 +507,6 @@ def vector_sim_hyperparameter_tuning(**config):
     type=click.Choice(['tc', 'tr']),
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
-)
-@click.option(
-    "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
 )
 def train_tbox(**config):
     from .train import training
@@ -523,7 +518,7 @@ def train_tbox(**config):
     }
     final_config.update(sweep_specific_params)
     final_config.update(config)
-    graph_tags = parse_graph_npz_path(config['data_path'])
+    graph_tags = parse_graph_path(config['data_path'])
     wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
@@ -554,9 +549,6 @@ def train_tbox(**config):
     type=click.Choice(['tc', 'tr']),
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
-)
-@click.option(
-    "--seed", type=int, help="seed for random number generator (mostly for model — not graph seed)",
 )
 @click.option(
     "--lr_nw_json", type=str, help="path to json storing graph type and negative ratio to best learning rate and negative weight"
@@ -585,7 +577,7 @@ def train_vector_sim(**config):
 
     final_config.update(sweep_specific_params)
     final_config.update(config)
-    graph_tags = parse_graph_npz_path(config['data_path'])
+    graph_tags = parse_graph_path(config['data_path'])
     wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])

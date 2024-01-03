@@ -11,9 +11,8 @@ def main(args):
         "${program}",
         f"train_{args.model}",      # train_tbox or train_vector_sim
         "${args}",
-        "--lr_nw_json=/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json",
     ],
-    "method": "bayes",
+    "method": "grid",
     "metric": {
     "goal": "maximize",
     "name": "[Eval] F1"
@@ -127,12 +126,12 @@ def main(args):
         "sample_positive_edges_from_tc_or_tr": {
             "values": ["tc", "tr"]
         },
-        "seed": {   # mostly model seed (i.e. not graph seed)
-            "values": [1, 2]       # FIXME what's the correct way to pick 10 random seed numbers?
-        }
     },
     "program": "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/scripts/box-training-methods"
     }
+
+    if args.model == "vector_sim":
+        sweep_config["command"].append(f"--lr_nw_json={args.lr_nw_json}")
 
     sweep_id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
     print(sweep_id)
@@ -143,6 +142,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, choices=["tbox", "vector_sim"], required=True,
                         help="whether to run tbox or vector_sim sweep")
+    parser.add_argument("--lr_nw_json", type=str, help="json file with graph type and negative ratio to best learning rate and negative weight",
+                        default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json")
     args = parser.parse_args()
 
     main(args)

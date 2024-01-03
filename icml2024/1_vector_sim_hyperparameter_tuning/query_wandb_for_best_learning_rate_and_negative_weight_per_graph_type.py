@@ -44,7 +44,7 @@ if __name__ == "__main__":
                         help="txt file with sweep ids")
     parser.add_argument("--output_json_file", type=str, required=True,
                         default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/best_learning_rate_and_negative_weight_per_graph_type.json",
-                        help="json file where to write graph type to best learning rate and negative weight")
+                        help="json file where to write graph type and negative ratio to best learning rate and negative weight")
     args = parser.parse_args()
 
     main(args)

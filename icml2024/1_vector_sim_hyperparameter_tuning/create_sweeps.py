@@ -18,9 +18,6 @@ sweep_config_template = {
  },
  "name": "",            # this gets filled in by code below
  "parameters": {
-    "data_path": {
-        "values": []    # this gets filled in by code below
-    },
     "learning_rate": {
          "distribution": "log_uniform",
          "max": 0,
@@ -31,12 +28,6 @@ sweep_config_template = {
         "max": 1,
         "min": 0
     },
-    "negative_ratio": {
-        "values": [4, 128]
-    },
-    "seed": {   # mostly model seed (i.e. not graph seed)
-        "values": [1, 2]       # FIXME what's the correct way to pick 10 random seed numbers?
-    }
  },
  "program": "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/scripts/box-training-methods"
 }
@@ -76,19 +67,12 @@ def main(args):
 
     sweep_ids = []
     for graph_dir_path in graph_dir_paths:
-        
-        # get all graph random seed npz files for this graph
-        graph_npz_paths = []
-        for file in os.listdir(graph_dir_path):
-            if file.endswith(".npz"):
-                graph_npz_paths.append(os.path.join(graph_dir_path, file))
-
         d, s = parse_graph_dir_path(graph_dir_path)
         for negative_ratio in [4, 128]:
             sweep_config = copy.deepcopy(sweep_config_template)
             sweep_config["name"] = f"{s} negative_ratio={negative_ratio}"
-            sweep_config["parameters"]["data_path"]["values"] = graph_npz_paths
-            sweep_config["parameters"]["negative_ratio"]["values"] = [negative_ratio]
+            sweep_config["command"].append(f"--data_path={graph_dir_path}")
+            sweep_config["command"].append(f"--negative_ratio={negative_ratio}")
             print(sweep_config)
             id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
             print(f"Created wandb sweep with id {id}")
