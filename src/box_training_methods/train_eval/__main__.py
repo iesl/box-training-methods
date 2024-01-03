@@ -440,6 +440,7 @@ BASE_CONFIG = {
     'patience': 1000,
     'save_model': False,
     'save_prediction': False,
+    'seed': None,
     'task': 'graph_modeling',
     'undirected': None,
     'wandb': True,
