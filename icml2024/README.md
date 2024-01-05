@@ -54,11 +54,15 @@ Create the sweep for all `tbox` experiments:
 python3 create_sweep.py --model tbox
 ```
 
-This will print out the `SWEEP_ID` of the created sweep. Launch the agents for the sweep as follows (the array mode will launch one agent per each of the 5 partitions listed in `./partition_assignments.txt` — feel free to repeat this command as many times as needed to saturate the partitions):
+This will print out the `SWEEP_ID` of the created sweep. Launch the agents for the sweep as follows:
 
 ```
-sbatch --array=1-5 ./launch_agents.sh SWEEP_ID
+sbatch --array=1-59 ./launch_agents.sh SWEEP_ID
 ```
+
+Note that I have created `./partition_assignments.txt` (used by `./launch_agents.sh` in array mode) to utilize half of the gpus allowed for one PhD student as per [Unity documentation](https://docs.unity.rc.umass.edu/documentation/cluster_specs/partitions/gypsum/) (i.e. 6 for `gypsum-m40`, 20 for `gypsum-titanx`, etc.). The other half will be saturated when running the `vector_sim` experiments below.
+
+There are a total of `94 * 2 * 2 * 2 = 752` runs in this grid search, dividing by `59` agents gives `>12` runs per agent, and I set `--count 25` just to account for imbalanced completion times for different runs.
 
 ## Run vector_sim experiments
 
@@ -71,5 +75,7 @@ python3 create_sweep.py --model tbox --lr_nw_json ../1_vector_sim_hyperparameter
 Again, this will print out the `SWEEP_ID` of the created sweep. Kick off the sweep as above:
 
 ```
-sbatch --array=1-5 ./launch_agents.sh SWEEP_ID
+sbatch --array=1-59 ./launch_agents.sh SWEEP_ID
 ```
+
+Again, there are a total of `94 * 2 * 2 * 2 = 752` runs in this grid search, dividing by `59` agents gives `>12` runs per agent, and I set `--count 25` just to account for imbalanced completion times for different runs.
