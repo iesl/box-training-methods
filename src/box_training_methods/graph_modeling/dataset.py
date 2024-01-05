@@ -569,7 +569,7 @@ class HierarchyAwareNegativeEdges:
 
         # load/create negative edges
         if self.load_from_cache:
-            self.tail2heads_matrix = self.load()
+            self.load()
         else:
             G_tc = nx.transitive_closure(self.G)
             A_tc = nx.adjacency_matrix(G_tc, nodelist=nodes)
