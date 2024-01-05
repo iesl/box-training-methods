@@ -2,6 +2,13 @@
 
 ## Precompute and cache negatives for hierarchy-aware negative sampling
 
+Run the script to precompute and cache the matrix of tails to negative heads for all the transitively-closed graphs:
+
+```
+cd ./0_compute_and_cache_negatives
+sbatch --array=1-13 ./compute_and_cache_negatives.sh
+```
+
 ## Run vector_sim hyperparameter tuning for per-graph best learning rate and negative weight
 
 First, create the sweeps. Specify `output_sweep_ids_file` to the text file where the sweep ids for the created sweeps get stored, one per line. In total, 26 sweeps will get created, for each of the 13 graphs times `negative_ratio=[4, 128]`:

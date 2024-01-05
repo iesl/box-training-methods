@@ -1,5 +1,6 @@
 import os
 import math
+import itertools
 from pathlib import Path
 from time import time
 from collections import defaultdict
@@ -411,7 +412,7 @@ class RandomNegativeEdges:
         self._breakpoints.to(device)
         return self
 
-
+'''
 @attr.s(auto_attribs=True)
 class HierarchyAwareNegativeEdges:
 
@@ -540,6 +541,103 @@ class HierarchyAwareNegativeEdges:
         self.edges = self.edges.to(device)
         self.tail2heads_matrix = self.tail2heads_matrix.to(device)
         return self
+'''
+
+@attr.s(auto_attribs=True)
+class HierarchyAwareNegativeEdges:
+
+    edges: Tensor = attr.ib(validator=_validate_edge_tensor)
+    negative_ratio: int = 16
+    cache_dir: str = ""
+    graph_name: str = ""
+    load_from_cache: bool = False
+
+    def __attrs_post_init__(self):
+
+        self._device = self.edges.device
+
+        # create graph
+        G = nx.DiGraph()
+        G.add_edges_from((self.edges).tolist())
+        nodes = sorted(G.nodes)
+
+        # create weights for sampling negative edges
+        self.PAD = len(nodes)
+        weights = torch.ones((len(nodes), 1), dtype=torch.float)
+        weights = torch.vstack([weights, torch.tensor([1e-9])])
+        self.weights = torch.nn.Embedding.from_pretrained(weights, freeze=True, padding_idx=self.PAD)
+
+        # load/create negative edges
+        if self.load_from_cache:
+            self.tail2heads_matrix = self.load_from_cache()
+        else:
+            G_tc = nx.transitive_closure(G)
+            A_tc = nx.adjacency_matrix(G_tc, nodelist=nodes)
+            Dec = [set(A_tc[[n], :].nonzero()[1]) for n in nodes]
+            Anc = [set(A_tc[:, [n]].nonzero()[0]) for n in nodes]
+            N = set(itertools.product(nodes, nodes)).difference({(n, n) for n in nodes})
+            N.difference_update(set(G_tc.edges))
+            for (u,y) in sorted(list(N.copy())):
+                N.difference_update({(x,y) for x in Dec[u]})
+                N.difference_update({(u,v) for v in Anc[y]})
+            self.tail2heads_dict = defaultdict(list)
+            for (t,h) in N:
+                self.tail2heads_dict[t].append(h)
+            self.tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.tail2heads_dict)
+
+    def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
+        """
+        Return negative edges for each positive edge.
+
+        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the tail
+            node index and [...,1] is the head node index.
+        :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
+        """
+
+        device = positive_edges.device
+
+        tails = positive_edges[..., 0]
+        negative_heads = self.tail2heads_matrix[tails].long().to(device)
+        negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
+        
+        wrs = WeightedRandomSampler(weights=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
+        wrs = list(wrs)
+        negative_idxs = torch.tensor(wrs).to(device)
+        try:
+            negative_heads = torch.gather(negative_heads, -1, negative_idxs)
+        except RuntimeError:
+            # FIXME this happens when we have a leftover batch of one instance
+            negative_heads = torch.gather(negative_heads, -1, negative_idxs.unsqueeze(dim=0))
+
+        # FIXME for nodes with no HNS candidates, this will result in non-hierarchical negative_edges which may impact training
+        #  fix this with masking?
+        negative_heads[negative_heads == self.PAD] = -1
+
+        tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
+        negative_edges = torch.stack([tails, negative_heads], dim=-1)
+        return negative_edges
+
+    def create_packed_padded_matrix_for_sampling(self, x_to_Y):
+        sequences = [torch.tensor(x_to_Y.get(x, [self.PAD])) for x in sorted(self.G.nodes)]
+        packed_sequence = pack_sequence(sequences, enforce_sorted=False)
+        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=self.PAD)
+        return Y
+    
+    def cache(self):
+        torch.save(self.tail2heads_matrix, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+    
+    def load(self):
+        self.tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+
+    @property
+    def device(self):
+        return self._device
+
+    def to(self, device: Union[str, torch.device]):
+        self._device = device
+        self.edges = self.edges.to(device)
+        self.tail2heads_matrix = self.tail2heads_matrix.to(device)
+        return self
 
 
 @attr.s(auto_attribs=True)
@@ -614,9 +712,10 @@ if __name__ == "__main__":
     # assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
     
     edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
+    # edges = [(0,1), (1,2), (2,3), (4,5), (5,6), (6,7)]
     G = nx.DiGraph()
     G.add_edges_from(edges)
 
-    HANS = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
+    HANS = HierarchyAwareNegativeEdgesV2(edges=torch.tensor(list(G.edges)))
     
     breakpoint()

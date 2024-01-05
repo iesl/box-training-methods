@@ -16,9 +16,10 @@ def main(args):
         sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/{sweep_id}")
         runs = sweep.runs
         
-        sweep_graph_type, sweep_graph_hparams = sweep.config['parameters']['data_path']['values'][0].split('/')[-3:-1]
-        sweep_negative_ratio = sweep.config['parameters']['negative_ratio']['values'][0]
-        
+        data_path = [x for x in sweep.config['command'] if x.startswith('--data_path=')][0]
+        sweep_graph_type, sweep_graph_hparams = data_path.rstrip('/').split('/')[-2:]
+        sweep_negative_ratio = [x for x in sweep.config['command'] if x.startswith('--negative_ratio=')][0][len('--negative_ratio='):]
+
         # best_run = max(runs, key=lambda r: r.summary['[Eval] F1'])
         best_run = sweep.best_run()
         best_run_config = json.loads(best_run.json_config)

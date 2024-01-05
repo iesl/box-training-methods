@@ -13,10 +13,9 @@ def compute_and_cache_negatives(npz_file):
     cache_dir = os.path.dirname(npz_file)
     selected_graph_name = os.path.basename(npz_file)[:-len(".npz")]
     H = HierarchyAwareNegativeEdges(edges=edges,
-                                    aggressive_pruning=True,
                                     negative_ratio=16,
                                     cache_dir=cache_dir,
-                                    selected_graph_name=selected_graph_name)
+                                    graph_name=selected_graph_name)
     H.cache()
     
     print(f"Processed graph {selected_graph_name} in {str(time.time() - t1)} seconds")

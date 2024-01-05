@@ -297,7 +297,6 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         elif config["negative_sampler"] == "hierarchical":
             negative_sampler = HierarchyAwareNegativeEdges(
                 edges=training_edges,
-                aggressive_pruning=False,
                 negative_ratio=config["negative_ratio"],
                 cache_dir=os.path.dirname(npz_file),
                 graph_name=selected_graph_name,

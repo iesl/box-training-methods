@@ -10,6 +10,6 @@ cd /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml202
 
 GRAPH_DIR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "./graph_dir_paths.txt")
 
-PYTHONPATH=.. \
+PYTHONPATH=/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods \
 python ./compute_and_cache_negatives.py \
 --graph_dir=${GRAPH_DIR}
