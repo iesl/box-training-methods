@@ -609,7 +609,7 @@ class HierarchyAwareNegativeEdges:
             # FIXME this happens when we have a leftover batch of one instance
             negative_heads = torch.gather(negative_heads, -1, negative_idxs.unsqueeze(dim=0))
 
-        # FIXME for nodes with no HNS candidates, this will result in non-hierarchical negative_edges which may impact training
+        # FIXME for nodes with no negative candidates, this will result in non-hierarchical negative_edges which may impact training
         #  fix this with masking?
         negative_heads[negative_heads == self.PAD] = -1
 
