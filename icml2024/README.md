@@ -36,4 +36,16 @@ This file gets utilized by the `train_vector_sim` entrypoint, which loads it and
 
 ## Run tbox experiments
 
+Kick off the sweep for all `tbox` experiments:
+
+```
+python3 create_sweep.py --model tbox
+```
+
 ## Run vector_sim experiments
+
+Kick off the sweep for all `vector_sim` experiments:
+
+```
+python3 create_sweep.py --model tbox --lr_nw_json ../1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json
+```

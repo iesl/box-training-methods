@@ -557,9 +557,9 @@ class HierarchyAwareNegativeEdges:
         self._device = self.edges.device
 
         # create graph
-        G = nx.DiGraph()
-        G.add_edges_from((self.edges).tolist())
-        nodes = sorted(G.nodes)
+        self.G = nx.DiGraph()
+        self.G.add_edges_from((self.edges).tolist())
+        nodes = sorted(self.G.nodes)
 
         # create weights for sampling negative edges
         self.PAD = len(nodes)
@@ -571,7 +571,7 @@ class HierarchyAwareNegativeEdges:
         if self.load_from_cache:
             self.tail2heads_matrix = self.load_from_cache()
         else:
-            G_tc = nx.transitive_closure(G)
+            G_tc = nx.transitive_closure(self.G)
             A_tc = nx.adjacency_matrix(G_tc, nodelist=nodes)
             Dec = [set(A_tc[[n], :].nonzero()[1]) for n in nodes]
             Anc = [set(A_tc[:, [n]].nonzero()[0]) for n in nodes]
