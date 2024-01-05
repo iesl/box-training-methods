@@ -514,8 +514,11 @@ def train_tbox(**config):
     final_config = copy.deepcopy(BASE_CONFIG)
     sweep_specific_params = {
         'model_type': 'tbox',
+        'box_intersection_temp': 0.01,
+        'box_volume_temp': 1.0,
+        'tbox_temperature_type': 'global',
         'learning_rate': 0.2,
-        'negative_weight': 0.9
+        'negative_weight': 0.9,
     }
     final_config.update(sweep_specific_params)
     final_config.update(config)
