@@ -9,7 +9,7 @@ cd ./0_compute_and_cache_negatives
 sbatch --array=1-13 ./compute_and_cache_negatives.sh
 ```
 
-Go to the next directory for tuning `learning_rate` and `negative_weight` for per-graph, per-negative weight `vector_sim`` runs:
+Go to the next directory for tuning `learning_rate` and `negative_weight` for per-graph, per-negative weight `vector_sim` runs:
 
 ```
 cd ../1_vector_sim_hyperparameter_tuning
