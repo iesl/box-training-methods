@@ -300,8 +300,8 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
                 negative_ratio=config["negative_ratio"],
                 cache_dir=os.path.dirname(npz_file),
                 graph_name=selected_graph_name,
-                load_from_cache=True
-            )
+                load_from_cache=True,
+            ).to(device)
         else:
             raise NotImplementedError
     else:

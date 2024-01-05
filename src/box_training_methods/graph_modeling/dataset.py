@@ -551,7 +551,6 @@ class HierarchyAwareNegativeEdges:
     cache_dir: str = ""
     graph_name: str = ""
     load_from_cache: bool = False
-    _device = None
 
     def __attrs_post_init__(self):
 
@@ -584,8 +583,6 @@ class HierarchyAwareNegativeEdges:
                 self.tail2heads_dict[t].append(h)
             self.tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.tail2heads_dict)
 
-        self.to(self._device)
-
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
         Return negative edges for each positive edge.
@@ -595,11 +592,12 @@ class HierarchyAwareNegativeEdges:
         :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
         """
 
-        device = positive_edges.device
+        # device = positive_edges.device
 
         tails = positive_edges[..., 0]
-        negative_heads = self.tail2heads_matrix[tails].long().to(device)
-        negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
+        negative_heads = self.tail2heads_matrix[tails].long()#.to(device)
+        # negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
+        negative_heads_weights = self.weights(negative_heads).squeeze()
         
         wrs = WeightedRandomSampler(weights=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
         wrs = list(wrs)
@@ -638,6 +636,7 @@ class HierarchyAwareNegativeEdges:
         self._device = device
         self.edges = self.edges.to(device)
         self.tail2heads_matrix = self.tail2heads_matrix.to(device)
+        self.weights = self.weights.to(device)
         return self
 
 
