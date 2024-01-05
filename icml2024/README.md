@@ -48,16 +48,28 @@ cd ../2_run_experiments
 
 ## Run tbox experiments
 
-Kick off the sweep for all `tbox` experiments:
+Create the sweep for all `tbox` experiments:
 
 ```
 python3 create_sweep.py --model tbox
 ```
 
+This will print out the `SWEEP_ID` of the created sweep. Launch the agents for the sweep as follows (the array mode will launch one agent per each of the 5 partitions listed in `./partition_assignments.txt` — feel free to repeat this command as many times as needed to saturate the partitions):
+
+```
+sbatch --array=1-5 ./launch_agents.sh SWEEP_ID
+```
+
 ## Run vector_sim experiments
 
-Kick off the sweep for all `vector_sim` experiments:
+Create the sweep for all `vector_sim` experiments:
 
 ```
 python3 create_sweep.py --model tbox --lr_nw_json ../1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json
+```
+
+Again, this will print out the `SWEEP_ID` of the created sweep. Kick off the sweep as above:
+
+```
+sbatch --array=1-5 ./launch_agents.sh SWEEP_ID
 ```
