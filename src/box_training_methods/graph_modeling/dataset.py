@@ -551,10 +551,9 @@ class HierarchyAwareNegativeEdges:
     cache_dir: str = ""
     graph_name: str = ""
     load_from_cache: bool = False
+    _device = None
 
     def __attrs_post_init__(self):
-
-        self._device = self.edges.device
 
         # create graph
         self.G = nx.DiGraph()
@@ -584,6 +583,8 @@ class HierarchyAwareNegativeEdges:
             for (t,h) in N:
                 self.tail2heads_dict[t].append(h)
             self.tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.tail2heads_dict)
+
+        self.to(self._device)
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
