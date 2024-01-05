@@ -563,11 +563,10 @@ def train_vector_sim(**config):
         'vector_use_bias': True,
     }
 
-    # get best learning_rate and negative_weight from json
+    # --- get best learning_rate and negative_weight from json
     with open(config["lr_nw_json"], "r") as f:
         lr_nw_json = json.load(f)
     del config["lr_nw_json"]
-    
     graph_type, graph_hparams = config["data_path"].split("/")[-3:-1]
     learning_rate = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_learning_rate']
     negative_weight = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_negative_weight']
@@ -575,6 +574,7 @@ def train_vector_sim(**config):
         "learning_rate": learning_rate,
         "negative_weight": negative_weight,
     })
+    # ------
 
     final_config.update(sweep_specific_params)
     final_config.update(config)
