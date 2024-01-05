@@ -592,24 +592,14 @@ class HierarchyAwareNegativeEdges:
         :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
         """
 
-        # device = positive_edges.device
-
         tails = positive_edges[..., 0]
-        negative_heads = self.tail2heads_matrix[tails].long()#.to(device)
-        # negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
+        negative_heads = self.tail2heads_matrix[tails].long()
         negative_heads_weights = self.weights(negative_heads).squeeze()
         
-        wrs = WeightedRandomSampler(weights=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
-        wrs = list(wrs)
-        negative_idxs = torch.tensor(wrs).to(device)
-        try:
-            negative_heads = torch.gather(negative_heads, -1, negative_idxs)
-        except RuntimeError:
-            # FIXME this happens when we have a leftover batch of one instance
-            negative_heads = torch.gather(negative_heads, -1, negative_idxs.unsqueeze(dim=0))
+        negative_idxs = torch.multinomial(input=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
+        negative_heads = torch.gather(negative_heads, -1, negative_idxs)
 
         # FIXME for nodes with no negative candidates, this will result in non-hierarchical negative_edges which may impact training
-        #  fix this with masking?
         negative_heads[negative_heads == self.PAD] = -1
 
         tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
