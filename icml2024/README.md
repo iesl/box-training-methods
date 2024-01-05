@@ -69,7 +69,7 @@ There are a total of `94 * 2 * 2 * 2 = 752` runs in this grid search, dividing b
 Create the sweep for all `vector_sim` experiments:
 
 ```
-python3 create_sweep.py --model tbox --lr_nw_json ../1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json
+python3 create_sweep.py --model vector_sim --lr_nw_json ../1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json
 ```
 
 Again, this will print out the `SWEEP_ID` of the created sweep. Kick off the sweep as above:
