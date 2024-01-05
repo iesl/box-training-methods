@@ -9,6 +9,12 @@ cd ./0_compute_and_cache_negatives
 sbatch --array=1-13 ./compute_and_cache_negatives.sh
 ```
 
+Go to the next directory for tuning `learning_rate` and `negative_weight` for per-graph, per-negative weight `vector_sim`` runs:
+
+```
+cd ../1_vector_sim_hyperparameter_tuning
+```
+
 ## Run vector_sim hyperparameter tuning for per-graph best learning rate and negative weight
 
 First, create the sweeps. Specify `output_sweep_ids_file` to the text file where the sweep ids for the created sweeps get stored, one per line. In total, 26 sweeps will get created, for each of the 13 graphs times `negative_ratio=[4, 128]`:
@@ -33,6 +39,12 @@ python3 query_wandb_for_best_learning_rate_and_negative_weight_per_graph_type.py
 ```
 
 This file gets utilized by the `train_vector_sim` entrypoint, which loads it and retrieves the corresponding learning rate and negative weight to use, depending on the run's hyperparameters.
+
+Finally, change to the next directory for running the experiments:
+
+```
+cd ../2_run_experiments
+```
 
 ## Run tbox experiments
 
