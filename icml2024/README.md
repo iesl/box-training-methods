@@ -6,7 +6,7 @@ Run the script to precompute and cache the matrix of tails to negative heads for
 
 ```
 cd ./0_compute_and_cache_negatives
-sbatch --array=1-13 ./compute_and_cache_negatives.sh
+sbatch --array=1-94 ./compute_and_cache_negatives.sh
 ```
 
 Go to the next directory for tuning `learning_rate` and `negative_weight` for per-graph, per-negative weight `vector_sim` runs:

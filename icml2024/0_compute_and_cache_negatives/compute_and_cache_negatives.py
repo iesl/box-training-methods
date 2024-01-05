@@ -21,17 +21,15 @@ def compute_and_cache_negatives(npz_file):
     print(f"Processed graph {selected_graph_name} in {str(time.time() - t1)} seconds")
 
 
-def process_graph_dir(args):
-    graph_dir = str(args.graph_dir).strip('"')  # FIXME need to strip " because bash script adds it
-    for file in os.listdir(graph_dir):
-        if file.endswith(".npz"):
-            compute_and_cache_negatives(npz_file=os.path.join(graph_dir, file))
+def process_graph(args):
+    graph_path = str(args.graph_path).strip('"')
+    compute_and_cache_negatives(npz_file=graph_path)
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--graph_dir", type=str)
+    parser.add_argument("-p", "--graph_path", type=str)
     args = parser.parse_args()
 
-    process_graph_dir(args)
+    process_graph(args)
