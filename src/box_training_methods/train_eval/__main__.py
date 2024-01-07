@@ -414,6 +414,7 @@ def train_final(**config):
 
 
 def parse_graph_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True(/4.npz)
+    path = path.strip()
     pieces = path.rstrip("/").split("/")
     if path.endswith(".npz"):
         graph_type, graph_hparams, graph_seed = pieces[-3], pieces[-2], pieces[-1][:-len(".npz")]

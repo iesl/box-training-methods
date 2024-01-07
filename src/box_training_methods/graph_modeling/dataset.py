@@ -1,5 +1,6 @@
 import os
 import math
+import random
 import itertools
 from pathlib import Path
 from time import time
@@ -600,7 +601,8 @@ class HierarchyAwareNegativeEdges:
         negative_heads = torch.gather(negative_heads, -1, negative_idxs)
 
         # FIXME for nodes with no negative candidates, this will result in non-hierarchical negative_edges which may impact training
-        negative_heads[negative_heads == self.PAD] = -1
+        # -> TODO introduce mask? That would use a lot of memory...
+        negative_heads[negative_heads == self.PAD] = random.randint(0, len(self.G.nodes) - 1)
 
         tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
         negative_edges = torch.stack([tails, negative_heads], dim=-1)
