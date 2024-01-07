@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -c 16  # Number of Cores per Task
-#SBATCH --mem=128GG  # Requested Memory
+#SBATCH --mem=128G  # Requested Memory
 #SBATCH -p cpu  # Partition
 #SBATCH -t 12:00:00  # Job time limit
 #SBATCH -o slurm/slurm-%j.out  # %j = job ID
