@@ -25,8 +25,8 @@ def main(args):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--rootdir", default="/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/", type=str)
-    parser.add_argument("-e", "--extension_to_delete", type=str, help="delete all files under rootdir with this extension")
+    parser.add_argument("-r", "--rootdir", type=str, required=True)
+    parser.add_argument("-e", "--extension_to_delete", type=str, required=True, help="delete all files under rootdir with this extension")
     parser.add_argument("--deleting_dirs", action="store_true", help="use this flag if deleting directories whose names have extension; otherwise deleting files")
     args = parser.parse_args()
 

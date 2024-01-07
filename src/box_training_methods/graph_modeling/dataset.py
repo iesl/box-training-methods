@@ -667,7 +667,7 @@ class HierarchyAwareNegativeEdges:
 
     def cache(self):
         torch.save(self.tail2heads_matrix, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
-        with open(os.path.join(self.cache_dir, self.graph_name + ".stats.json"), "w") as f:
+        with open(os.path.join(self.cache_dir, self.graph_name + ".icml2024stats.json"), "w") as f:
             json.dump(self.stats(), f, indent=4, sort_keys=False)
     
     def load(self):

@@ -2,11 +2,12 @@
 
 ## Precompute and cache negatives for hierarchy-aware negative sampling
 
-Run the script to precompute and cache the matrix of tails to negative heads for all the transitively-closed graphs:
+Run the script to precompute and cache the matrix of tails to negative heads for all the transitively-closed graphs (this will also compute the stats and store them as a json):
 
 ```
 cd ./0_compute_and_cache_negatives
-sbatch --array=1-94 ./compute_and_cache_negatives.sh
+sbatch --array=1-94 ./synthetic_graphs.sh
+sbatch ./wordnet.sh
 ```
 
 Go to the next directory for tuning `learning_rate` and `negative_weight` for per-graph, per-negative weight `vector_sim` runs:
@@ -40,13 +41,13 @@ python3 query_wandb_for_best_learning_rate_and_negative_weight_per_graph_type.py
 
 This file gets utilized by the `train_vector_sim` entrypoint, which loads it and retrieves the corresponding learning rate and negative weight to use, depending on the run's hyperparameters.
 
-Finally, change to the next directory for running the experiments:
+Finally, change to the next directory for running the experiments on synthetic graphs:
 
 ```
-cd ../2_run_experiments
+cd ../2_synthetic_graphs
 ```
 
-## Run tbox experiments
+## Run tbox synthetic graphs experiments
 
 Create the sweep for all `tbox` experiments:
 
@@ -64,7 +65,7 @@ Note that I have created `./partition_assignments.txt` (used by `./launch_agents
 
 There are a total of `94 * 2 * 2 * 2 = 752` runs in this grid search, dividing by `59` agents gives `>12` runs per agent, and I set `--count 25` just to account for imbalanced completion times for different runs.
 
-## Run vector_sim experiments
+## Run vector_sim synthetic graphs experiments
 
 Create the sweep for all `vector_sim` experiments:
 
@@ -79,3 +80,7 @@ sbatch --array=1-59 ./launch_agents.sh VECTOR_SIM_SWEEP_ID
 ```
 
 Again, there are a total of `94 * 2 * 2 * 2 = 752` runs in this grid search, dividing by `59` agents gives `>12` runs per agent, and I set `--count 25` just to account for imbalanced completion times for different runs.
+
+```
+cd ../3_wordnet
+```
