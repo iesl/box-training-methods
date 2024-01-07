@@ -1,6 +1,7 @@
 import os
 import math
 import random
+import json
 import itertools
 from pathlib import Path
 from time import time
@@ -8,6 +9,7 @@ from collections import defaultdict
 from typing import *
 
 import attr
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import pickle
@@ -552,6 +554,7 @@ class HierarchyAwareNegativeEdges:
     cache_dir: str = ""
     graph_name: str = ""
     load_from_cache: bool = False
+    is_tc: bool = False
 
     def __attrs_post_init__(self):
 
@@ -570,19 +573,49 @@ class HierarchyAwareNegativeEdges:
         if self.load_from_cache:
             self.load()
         else:
-            G_tc = nx.transitive_closure(self.G)
+            if self.is_tc:
+                G_tc = self.G
+            else:
+                logger.info("getting transitive closure")
+                G_tc = nx.transitive_closure_dag(self.G)
+            
+            logger.info("creating adjacency matrix for transitively-closed graph")
             A_tc = nx.adjacency_matrix(G_tc, nodelist=nodes)
-            Dec = [set(A_tc[[n], :].nonzero()[1]) for n in nodes]
-            Anc = [set(A_tc[:, [n]].nonzero()[0]) for n in nodes]
-            N = set(itertools.product(nodes, nodes)).difference({(n, n) for n in nodes})
-            N.difference_update(set(G_tc.edges))
-            for (u,y) in sorted(list(N.copy())):
-                N.difference_update({(x,y) for x in Dec[u]})
-                N.difference_update({(u,v) for v in Anc[y]})
+            
+            logger.info("getting per-node descendants")
+            Dec = [A_tc[[n], :].nonzero()[1] for n in nodes]
+            
+            logger.info("getting per-node ancestors")
+            Anc = [A_tc[:, [n]].nonzero()[0] for n in nodes]
+            
+            logger.info("creating negative edge matrix (including all edges, to be pruned)")
+            N = np.ones((len(nodes), len(nodes)), dtype=np.int8)
+            
+            logger.info("removing self-loops from negative edges")
+            np.fill_diagonal(N, 0)
+            
+            logger.info("removing edges in transitive closure from negative edges")
+            G_tc_edges = np.array(G_tc.edges)
+            N[G_tc_edges[:,0], G_tc_edges[:,1]] = 0
+
+            logger.info("pruning remaining negative edges according to generalized algorithm")
+            for u in tqdm(nodes):
+                for y in nodes:
+                    if N[u,y] == 1:
+                        N[Dec[u], y] = 0
+                        N[u, Anc[y]] = 0
+            
+            logger.info("creating tail2heads dict")
             self.tail2heads_dict = defaultdict(list)
-            for (t,h) in N:
-                self.tail2heads_dict[t].append(h)
+            for t in tqdm(nodes):
+                for h in nodes:
+                    if N[t,h] == 1:
+                        self.tail2heads_dict[t].append(h)
+            
+            logger.info("creating tail2heads matrix")
             self.tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.tail2heads_dict)
+            
+            logger.info("finished calculating hierarchy-aware negative edges")
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
         """
@@ -614,8 +647,28 @@ class HierarchyAwareNegativeEdges:
         Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=self.PAD)
         return Y
     
+    def stats(self):
+        num_positive_edges = len(self.G.edges)
+        num_positive_edges_in_transitive_closure = len(nx.transitive_closure_dag(self.G).edges)
+        num_positive_edges_in_transitive_reduction = len(nx.transitive_reduction(self.G).edges)
+        num_hierarchy_aware_negative_edges = sum(len(self.tail2heads_dict[t]) for t in self.tail2heads_dict.keys())
+        num_random_negative_edges = (len(self.G.nodes) * (len(self.G.nodes) - 1)) - num_positive_edges_in_transitive_closure
+        stats_dict = {
+            "[+edges]": num_positive_edges,
+            "[+edges_tc]": num_positive_edges_in_transitive_closure,
+            "[+edges_tr]": num_positive_edges_in_transitive_reduction,
+            "[-edges_h]": num_hierarchy_aware_negative_edges,
+            "[-edges_r]": num_random_negative_edges,
+            "[+edges_tr] / [+edges_tc]": num_positive_edges_in_transitive_reduction / num_positive_edges_in_transitive_closure,
+            "[-edges_h] / [-edges_r]": num_hierarchy_aware_negative_edges / num_random_negative_edges,
+            "([+edges_tr] + [-edges_h]) / ([+edges_tc] + [-edges_r])": (num_positive_edges_in_transitive_reduction + num_hierarchy_aware_negative_edges) / (num_positive_edges_in_transitive_closure + num_random_negative_edges),
+        }
+        return stats_dict
+
     def cache(self):
         torch.save(self.tail2heads_matrix, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+        with open(os.path.join(self.cache_dir, self.graph_name + ".stats.json"), "w") as f:
+            json.dump(self.stats(), f, indent=4, sort_keys=False)
     
     def load(self):
         self.tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
@@ -703,11 +756,20 @@ if __name__ == "__main__":
     # assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)
     # assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
     
-    edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
+    # edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
     # edges = [(0,1), (1,2), (2,3), (4,5), (5,6), (6,7)]
+
+    # print("loading graph edges and num nodes")
+    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full_tc.npz")
+    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=True/10.npz")
+    edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
+    print("creating digraph")
     G = nx.DiGraph()
     G.add_edges_from(edges)
+    breakpoint()
 
-    HANS = HierarchyAwareNegativeEdgesV2(edges=torch.tensor(list(G.edges)))
-    
+    print("start hierarchy-aware")
+    H = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
+    print("end hierarchy-aware")
+
     breakpoint()
