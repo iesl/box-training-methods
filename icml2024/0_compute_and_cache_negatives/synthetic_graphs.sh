@@ -8,7 +8,8 @@
 source /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/anaconda3/bin/activate box-training-methods
 cd /work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/0_compute_and_cache_negatives/
 
-GRAPH_DIR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "./tc_graph_paths.txt")
+GRAPH_PATH=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "./tc_graph_paths.txt")
 
 PYTHONPATH=/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods \
-python ./synthetic_graphs.py --graph_dir=${GRAPH_DIR}
+python ./synthetic_graphs.py \
+--graph_path=${GRAPH_PATH}
