@@ -255,164 +255,6 @@ def eval():
     pass
 
 
-@click.command(context_settings=dict(show_default=True),)
-@click.option("--model_type", type=click.Choice(['tbox', 'vector_sim']), required=True, help="model type")
-@click.option("--graph_type", type=click.Choice([
-    'balanced_tree/branching=10-log_num_nodes=13',
-    'balanced_tree/branching=2-log_num_nodes=13',
-    'balanced_tree/branching=3-log_num_nodes=13',
-    'balanced_tree/branching=5-log_num_nodes=13',
-    'nested_chinese_restaurant_process/alpha=10-log_num_nodes=13',
-    'nested_chinese_restaurant_process/alpha=100-log_num_nodes=13',
-    'nested_chinese_restaurant_process/alpha=500-log_num_nodes=13',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=1',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=10',
-    'price/c=0.01-gamma=1.0-log_num_nodes=13-m=5',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=1',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=10',
-    'price/c=0.1-gamma=1.0-log_num_nodes=13-m=5'
-]), help="graph type", required=True)
-@click.option("--tc_or_tr", type=click.Choice(['tc', 'tr']), required=True, help="transitive closure or transitive reduction")
-@click.option("--negative_sampler", type=click.Choice(['hierarchical', 'random']), required=True, help="sampling method")
-@click.option("--negative_ratio", type=int, required=True, help="negative ratio")
-@click.option(
-    "--seed", type=int, help="seed for random number generator mostly for the model",
-)
-@click.option("--graph_seed", type=int, help="seed for random number generator mostly for the graph")
-@click.option("--override_lr", type=bool, help="whether or not to override lr in final_config (for debugging)")
-@click.option("--override_lr_value", type=float, help="value to override learning rate with")
-@click.option("--override_negative_weight", type=bool, help="whether or not to override negative weight in final_config (for debugging)")
-@click.option("--override_negative_weight_value", type=float, help="value to override negative weight rate with")
-def train_final(**config):
-    """A new entry point for the final runs before neurips"""
-    from .train import training
-    final_config = {
-        'task': 'graph_modeling',
-        'negatives_permutation_option': 'none',
-        'dim': 64,
-        'log_batch_size': 9,
-        'log_eval_batch_size': 17,
-        'epochs': 40,
-        'margin': 1.0,
-        'hierarchical_negative_sampling_strategy': 'uniform',
-        'patience': 1000,
-        'log_interval': 0.2,
-        'eval': True,
-        'cuda': True,
-        'save_prediction': False,
-        'wandb': True,
-        'vector_separate_io': True,
-        'vector_use_bias': True,
-        'box_intersection_temp': 0.01,
-        'box_volume_temp': 1.0,
-        'tbox_temperature_type': 'global',
-        'save_model': False,
-        'save_prediction': False,
-        'constrain_deltas_fn': 'sqr',
-        'undirected': None,
-    }
-    graphs_dir = '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/'
-    if config['model_type'] == 'tbox':
-        final_config['model_type'] = 'tbox'
-        final_config['learning_rate'] = 0.2
-        final_config['negative_weight'] = 0.9
-    elif config['model_type'] == 'vector_sim':
-        import json
-        with open("./best_runs.jsonl", "r") as f:
-            best_runs = [json.loads(l.strip()) for l in f.readlines()]
-
-        final_config['model_type'] = 'vector_sim'
-        best_run = [r for r in best_runs if config['graph_type'] in r['data_path']]
-
-        try:
-            assert len(best_run) == 1
-            best_run = best_run[0]
-        except AssertionError:
-            best_run = best_run[0]
-            print("Multiple best runs found, using the first one")
-            print(best_run)
-
-        if not config["override_lr"]:
-            final_config['learning_rate'] = best_run['learning_rate']
-        else:
-            final_config['learning_rate'] = config['override_lr_value']
-
-        if not config["override_negative_weight"]:
-            final_config['negative_weight'] = best_run['learning_rate']
-        else:
-            final_config['negative_weight'] = config['override_negative_weight_value']
-    config["graph_type"] = '-'.join([config["graph_type"], "transitive_closure=True"])
-    if 'balanced_tree' in config['graph_type']:
-        if 'branching=10' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
-            seed_map = {
-                1: 415728013, 2: 415728013, 3: 415728013, 4: 415728013, 5: 415728013
-            }
-
-        elif 'branching=10' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
-            seed_map = {
-                1: 2150935259
-            }
-        elif 'branching=2' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
-            seed_map = {
-                1: 1901635484, 2: 1901635484, 3: 1901635484, 4: 1901635484, 5: 1901635484,
-            }
-        elif 'branching=2' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
-            seed_map = {
-                1: 2902554954,
-            }
-        elif 'branching=3' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
-            seed_map = {
-                1: 1439248948, 2: 1439248948, 3: 1439248948, 4: 1439248948, 5: 1439248948,
-            }
-        elif 'branching=3' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
-            seed_map = {
-                1: 38311313
-            }
-        elif 'branching=5' in config['graph_type'] and 'transitive_closure=True' in config['graph_type']:
-            seed_map = {
-                1: 1246911898, 2: 1246911898, 3: 1246911898, 4: 1246911898, 5: 1246911898
-            }
-        elif 'branching=5' in config['graph_type'] and 'transitive_closure=False' in config['graph_type']:
-            seed_map = {
-                1: 367229542
-            }
-        else:
-            raise ValueError("Balanced tree only has branching 2, 3, 5, 10")
-
-
-
-        if config["graph_seed"] not in seed_map:
-            raise ValueError("Balanced tree only has seeds 1")
-        config['graph_seed'] = seed_map[config['graph_seed']]
-
-    final_config['data_path'] = str((Path(graphs_dir) / config['graph_type'] / str(config['graph_seed'])).with_suffix('.npz'))
-
-    final_config['negative_sampler'] = config['negative_sampler']
-    final_config['negative_ratio'] = config['negative_ratio']
-    final_config['seed'] = config['seed']
-    final_config['sample_positive_edges_from_tc_or_tr'] = config['tc_or_tr']
-
-    for k, v in config.items():
-        final_config[f"g_{k}"] = v
-    # wandb
-    if final_config['wandb']:
-        final_config['wandb_tags'] = [
-            f"model_type={final_config['model_type']}" , 
-            f"negative_sampler={final_config['negative_sampler']}",
-            f"negative_ratio={final_config['negative_ratio']}",
-            f"seed={final_config['seed']}",
-            f"tc_or_tr={config['tc_or_tr']}",
-            f"graph_seed={config['graph_seed']}"
-        ]
-        gt, gp = config['graph_type'].split('/')
-        final_config['wandb_tags'].append(f"{gt}")
-        for k_v in gp.split('-'):
-            final_config['wandb_tags'].append(k_v)
-        final_config['wandb_name'] = f"final_run-{final_config['model_type']}"
-    final_config['output_dir'] = None
-    training(final_config)
-
-
 def parse_graph_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True(/4.npz)
     path = path.strip()
     pieces = path.rstrip("/").split("/")
@@ -588,3 +430,48 @@ def train_vector_sim(**config):
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
     training(final_config)
+
+
+@click.command(context_settings=dict(show_default=True),)
+@click.option(
+    "--model_type",
+    type=click.Choice(["tbox", "vector_sim"])
+)
+@click.option(
+    "--negative_sampler",
+    type=str,
+    default="random",
+    help="whether to use RandomNegativeEdges or HierarchyAwareNegativeEdges"
+)
+def train_wordnet(**config):
+    from .train import training
+    wordnet_config = {
+        'box_intersection_temp': 0.01,
+        'box_volume_temp': 1.0,
+        'cuda': True,
+        'data_path': '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz',
+        'dim': 64,
+        'epochs': 500,
+        'eval': True,
+        'learning_rate': 0.2,
+        'log_batch_size': 9,
+        'log_eval_batch_size': 0,
+        'log_interval': 0.2,
+        'negative_ratio': 128,
+        'negative_weight': 0.9,
+        'negatives_permutation_option': 'none',
+        'output_dir': None,
+        'patience': 10000,
+        'sample_positive_edges_from_tc_or_tr': 'tr',
+        'save_model': False,
+        'save_prediction': False,
+        'seed': None,
+        'task': 'graph_modeling',
+        'tbox_temperature_type': 'global',
+        'undirected': None,
+        'vector_separate_io': True,
+        'vector_use_bias': True,
+        'wandb': True,
+    }
+    wordnet_config.update(config)
+    training(wordnet_config)
