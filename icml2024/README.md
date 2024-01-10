@@ -28,7 +28,7 @@ python3 create_sweeps.py --output_sweep_ids_file ./sweep_ids.txt
 Now launch agents to run the sweeps that have been created, in [Array Batch jobs](https://docs.unity.rc.umass.edu/documentation/jobs/sbatch/arrays/) mode:
 
 ```
-sbatch --array=1-26 ./launch_agents.sh
+sbatch --array=1-208 ./launch_agents.sh
 ```
 
 Finally, aggregate the best learning rate and negative weight from the sweeps and store in a json file, to be retrieved by the `synthetic_graphs` sweeps for the following experiments:
