@@ -563,12 +563,6 @@ class HierarchyAwareNegativeEdges:
         self.G.add_edges_from((self.edges).tolist())
         nodes = sorted(self.G.nodes)
 
-        # create weights for sampling negative edges
-        self.PAD = len(nodes)
-        weights = torch.ones((len(nodes), 1), dtype=torch.float)
-        weights = torch.vstack([weights, torch.tensor([1e-9])])
-        self.weights = torch.nn.Embedding.from_pretrained(weights, freeze=True, padding_idx=self.PAD)
-
         # load/create negative edges
         if self.load_from_cache:
             self.load()
@@ -599,22 +593,15 @@ class HierarchyAwareNegativeEdges:
             N[G_tc_edges[:,0], G_tc_edges[:,1]] = 0
 
             logger.info("pruning remaining negative edges according to generalized algorithm")
-            for u in tqdm(nodes):
+            for u in tqdm(nodes[:10]):
                 for y in nodes:
                     if N[u,y] == 1:
                         N[Dec[u], y] = 0
                         N[u, Anc[y]] = 0
-            
-            logger.info("creating tail2heads dict")
-            self.tail2heads_dict = defaultdict(list)
-            for t in tqdm(nodes):
-                for h in nodes:
-                    if N[t,h] == 1:
-                        self.tail2heads_dict[t].append(h)
-            
-            logger.info("creating tail2heads matrix")
-            self.tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.tail2heads_dict)
-            
+
+            self.negative_edges = torch.tensor(np.stack(N.nonzero()).T)     # (num_negative_edges, 2)
+            del N
+
             logger.info("finished calculating hierarchy-aware negative edges")
 
     def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
@@ -626,32 +613,15 @@ class HierarchyAwareNegativeEdges:
         :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
         """
 
-        tails = positive_edges[..., 0]
-        negative_heads = self.tail2heads_matrix[tails].long()
-        negative_heads_weights = self.weights(negative_heads).squeeze()
-        
-        negative_idxs = torch.multinomial(input=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
-        negative_heads = torch.gather(negative_heads, -1, negative_idxs)
-
-        # FIXME for nodes with no negative candidates, this will result in non-hierarchical negative_edges which may impact training
-        # -> TODO introduce mask? That would use a lot of memory...
-        negative_heads[negative_heads == self.PAD] = random.randint(0, len(self.G.nodes) - 1)
-
-        tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
-        negative_edges = torch.stack([tails, negative_heads], dim=-1)
+        negative_edge_idxs = torch.randint(high=self.negative_edges.shape[0], size=(positive_edges.shape[0] * self.negative_ratio,)).to(self.device)
+        negative_edges = self.negative_edges[negative_edge_idxs].reshape((positive_edges.shape[0], self.negative_ratio, 2))        
         return negative_edges
-
-    def create_packed_padded_matrix_for_sampling(self, x_to_Y):
-        sequences = [torch.tensor(x_to_Y.get(x, [self.PAD])) for x in sorted(self.G.nodes)]
-        packed_sequence = pack_sequence(sequences, enforce_sorted=False)
-        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=self.PAD)
-        return Y
     
     def stats(self):
         num_positive_edges = len(self.G.edges)
         num_positive_edges_in_transitive_closure = len(nx.transitive_closure_dag(self.G).edges)
         num_positive_edges_in_transitive_reduction = len(nx.transitive_reduction(self.G).edges)
-        num_hierarchy_aware_negative_edges = sum(len(self.tail2heads_dict[t]) for t in self.tail2heads_dict.keys())
+        num_hierarchy_aware_negative_edges = self.negative_edges.shape[0]
         num_random_negative_edges = (len(self.G.nodes) * (len(self.G.nodes) - 1)) - num_positive_edges_in_transitive_closure
         stats_dict = {
             "[+edges]": num_positive_edges,
@@ -666,12 +636,12 @@ class HierarchyAwareNegativeEdges:
         return stats_dict
 
     def cache(self):
-        torch.save(self.tail2heads_matrix, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+        torch.save(self.negative_edges, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
         with open(os.path.join(self.cache_dir, self.graph_name + ".icml2024stats.json"), "w") as f:
             json.dump(self.stats(), f, indent=4, sort_keys=False)
     
     def load(self):
-        self.tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+        self.negative_edges = torch.load(os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
 
     @property
     def device(self):
@@ -680,8 +650,7 @@ class HierarchyAwareNegativeEdges:
     def to(self, device: Union[str, torch.device]):
         self._device = device
         self.edges = self.edges.to(device)
-        self.tail2heads_matrix = self.tail2heads_matrix.to(device)
-        self.weights = self.weights.to(device)
+        self.negative_edges = self.negative_edges.to(device)
         return self
 
 
@@ -759,17 +728,24 @@ if __name__ == "__main__":
     # edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
     # edges = [(0,1), (1,2), (2,3), (4,5), (5,6), (6,7)]
 
-    # print("loading graph edges and num nodes")
+    print("loading graph edges and num nodes")
     # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full_tc.npz")
     # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=True/10.npz")
     edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
     print("creating digraph")
     G = nx.DiGraph()
     G.add_edges_from(edges)
-    breakpoint()
 
     print("start hierarchy-aware")
     H = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
     print("end hierarchy-aware")
+
+    # R = RandomNegativeEdges(
+    #     num_nodes=8192,
+    #     negative_ratio=128,
+    #     avoid_edges=None,
+    #     device="cpu",
+    #     permutation_option="none",
+    # )
 
     breakpoint()
