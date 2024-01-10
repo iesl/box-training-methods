@@ -69,7 +69,6 @@ def plot_error_regions(means, stds, colors, labels, title, fpath):
     plt.clf()
 
 
-
 def get_means_and_stddevs(runs):
     eval_f1s = []
     for r in runs:

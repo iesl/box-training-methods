@@ -9,15 +9,16 @@ def main(args):
         "${env}",
         "${interpreter}",
         "${program}",
-        f"train_{args.model}",      # train_tbox or train_vector_sim
+        f"synthetic_graphs",
         "${args}",
+        f"--lr_nw_json={args.lr_nw_json}",
     ],
     "method": "grid",
     "metric": {
     "goal": "maximize",
     "name": "[Eval] F1"
     },
-    "name": args.model,             # tbox or vector_sim
+    "name": "synthetic_graphs",
     "parameters": {
         "data_path": {
             "values": [
@@ -117,6 +118,9 @@ def main(args):
                 "/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/price/c=0.01-gamma=1.0-log_num_nodes=13-m=5-transitive_closure=True/9.npz",     
             ]
         },
+        "model_type": {
+            "values": ["vector_sim", "tbox"]
+        },
         "negative_ratio": {
             "values": [4, 128]
         },
@@ -130,9 +134,6 @@ def main(args):
     "program": "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/scripts/box-training-methods"
     }
 
-    if args.model == "vector_sim":
-        sweep_config["command"].append(f"--lr_nw_json={args.lr_nw_json}")
-
     sweep_id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
     print(sweep_id)
 
@@ -140,10 +141,8 @@ def main(args):
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, choices=["tbox", "vector_sim"], required=True,
-                        help="whether to run tbox or vector_sim sweep")
     parser.add_argument("--lr_nw_json", type=str, help="json file with graph type and negative ratio to best learning rate and negative weight",
-                        default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_vector_sim_hyperparameter_tuning/graph_type_to_best_learning_rate_and_negative_weight.json")
+                        default="/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/1_hyperparameter_tuning/configuration_to_best_learning_rate_and_negative_weight.json")
     args = parser.parse_args()
 
     main(args)

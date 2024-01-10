@@ -8,7 +8,7 @@ sweep_config_template = {
      "${env}",
      "${interpreter}",
      "${program}",
-     "vector_sim_hyperparameter_tuning",
+     "hyperparameter_tuning",
      "${args}" 
     ],
  "method": "bayes",
@@ -65,18 +65,25 @@ def parse_graph_dir_path(path):
 
 def main(args):
 
+    # create 13 x 2 x 2 x 2 x 2 = 208 sweeps total
     sweep_ids = []
-    for graph_dir_path in graph_dir_paths:
+    for graph_dir_path in graph_dir_paths:  # 13
         d, s = parse_graph_dir_path(graph_dir_path)
-        for negative_ratio in [4, 128]:
-            sweep_config = copy.deepcopy(sweep_config_template)
-            sweep_config["name"] = f"{s} negative_ratio={negative_ratio}"
-            sweep_config["command"].append(f"--data_path={graph_dir_path}")
-            sweep_config["command"].append(f"--negative_ratio={negative_ratio}")
-            print(sweep_config)
-            id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
-            print(f"Created wandb sweep with id {id}")
-            sweep_ids.append(id)
+        for model_type in ["vector_sim", "tbox"]:   # 2
+            for negative_sampler in ["random", "hierarchical"]: # 2
+                for negative_ratio in [4, 128]: # 2
+                    for sample_positive_edges_from_tc_or_tr in ["tr", "tc"]:    # 2
+                        sweep_config = copy.deepcopy(sweep_config_template)
+                        sweep_config["name"] = f"{s} {model_type} {negative_sampler} negative_ratio={negative_ratio} sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}"
+                        sweep_config["command"].append(f"--data_path={graph_dir_path}")
+                        sweep_config["command"].append(f"--model_type={model_type}")
+                        sweep_config["command"].append(f"--negative_sampler={negative_sampler}")
+                        sweep_config["command"].append(f"--negative_ratio={negative_ratio}")
+                        sweep_config["command"].append(f"--sample_positive_edges_from_tc_or_tr={sample_positive_edges_from_tc_or_tr}")
+                        print(sweep_config)
+                        id = wandb.sweep(sweep=sweep_config, entity="hierarchical-negative-sampling", project="icml2024")
+                        print(f"Created wandb sweep with id {id}")
+                        sweep_ids.append(id)
 
     with open(args.output_sweep_ids_file, "w") as f:
         f.write("\n".join(sweep_ids))

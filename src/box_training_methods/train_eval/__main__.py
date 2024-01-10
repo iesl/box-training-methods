@@ -273,7 +273,7 @@ def parse_graph_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_um
 BASE_CONFIG = {
     'cuda': True,
     'dim': 64,
-    'epochs': 40,
+    'epochs': 12,   # 12 to catch best-converging runs via best_run()
     'eval': True,
     'log_batch_size': 9,
     'log_eval_batch_size': 17,
@@ -286,6 +286,8 @@ BASE_CONFIG = {
     'seed': None,
     'task': 'graph_modeling',
     'undirected': None,
+    'vector_separate_io': True,
+    'vector_use_bias': True,
     'wandb': True,
 }
 
@@ -300,39 +302,8 @@ BASE_CONFIG = {
     "--learning_rate", type=float, default=0.01, help="learning rate",
 )
 @click.option(
-    "--negative_ratio",
-    type=int,
-    default=128,
-    help="number of negative samples for each positive",
-)
-@click.option(
-    "--negative_weight", type=float, default=0.9, help="weight of negative loss",
-)
-def vector_sim_hyperparameter_tuning(**config):
-    from .train import training
-    final_config = copy.deepcopy(BASE_CONFIG)
-    sweep_specific_params = {
-        'model_type': 'vector_sim',
-        'sample_positive_edges_from_tc_or_tr': 'tc',
-        'vector_separate_io': True,
-        'vector_use_bias': True,
-        'negative_sampler': 'random',
-    }
-    final_config.update(sweep_specific_params)
-    final_config.update(config)    
-    graph_tags = parse_graph_path(config['data_path'])
-    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
-    wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
-    wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
-    final_config['wandb_tags'] = wandb_tags
-    training(final_config)
-
-
-@click.command(context_settings=dict(show_default=True),)
-@click.option(
-    "--data_path",
-    type=click.Path(),
-    help="directory or file with data",
+    "--model_type",
+    type=click.Choice(["tbox", "vector_sim"])
 )
 @click.option(
     "--negative_ratio",
@@ -342,9 +313,10 @@ def vector_sim_hyperparameter_tuning(**config):
 )
 @click.option(
     "--negative_sampler",
-    type=str,
-    default="random",
-    help="whether to use RandomNegativeEdges or HierarchyAwareNegativeEdges"
+    type=click.Choice(["random", "hierarchical"])
+)
+@click.option(
+    "--negative_weight", type=float, default=0.9, help="weight of negative loss",
 )
 @click.option(
     "--sample_positive_edges_from_tc_or_tr",
@@ -352,22 +324,12 @@ def vector_sim_hyperparameter_tuning(**config):
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
 )
-def train_tbox(**config):
+def hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
-    sweep_specific_params = {
-        'model_type': 'tbox',
-        'box_intersection_temp': 0.01,
-        'box_volume_temp': 1.0,
-        'tbox_temperature_type': 'global',
-        'learning_rate': 0.2,
-        'negative_weight': 0.9,
-    }
-    final_config.update(sweep_specific_params)
-    final_config.update(config)
+    final_config.update(config)    
     graph_tags = parse_graph_path(config['data_path'])
     wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
-    wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
     training(final_config)
@@ -378,6 +340,10 @@ def train_tbox(**config):
     "--data_path",
     type=click.Path(),
     help="directory or file with data",
+)
+@click.option(
+    "--model_type",
+    type=click.Choice(["tbox", "vector_sim"])
 )
 @click.option(
     "--negative_ratio",
@@ -400,33 +366,33 @@ def train_tbox(**config):
 @click.option(
     "--lr_nw_json", type=str, help="path to json storing graph type and negative ratio to best learning rate and negative weight"
 )
-def train_vector_sim(**config):
+def synthetic_graphs(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
-    sweep_specific_params = {
-        'model_type': 'vector_sim',
-        'vector_separate_io': True,
-        'vector_use_bias': True,
-    }
+    final_config["epochs"] = 40
 
     # --- get best learning_rate and negative_weight from json
     with open(config["lr_nw_json"], "r") as f:
         lr_nw_json = json.load(f)
     del config["lr_nw_json"]
+
     graph_type, graph_hparams = config["data_path"].split("/")[-3:-1]
-    learning_rate = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_learning_rate']
-    negative_weight = lr_nw_json[graph_type][graph_hparams][f'negative_ratio={config["negative_ratio"]}']['best_negative_weight']
+    model_type = config["model_type"]
+    negative_sampler = config["negative_sampler"]
+    negative_ratio = config["negative_ratio"]
+    sample_positive_edges_from_tc_or_tr = config["sample_positive_edges_from_tc_or_tr"]
+    
+    learning_rate = lr_nw_json[graph_type][graph_hparams][model_type][f'negative_sampler={negative_sampler}'][f'negative_ratio={negative_ratio}'][f'sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}']['best_learning_rate']
+    negative_weight = lr_nw_json[graph_type][graph_hparams][model_type][f'negative_sampler={negative_sampler}'][f'negative_ratio={negative_ratio}'][f'sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}']['best_negative_weight']
     config.update({
         "learning_rate": learning_rate,
         "negative_weight": negative_weight,
     })
     # ------
 
-    final_config.update(sweep_specific_params)
     final_config.update(config)
     graph_tags = parse_graph_path(config['data_path'])
     wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
-    wandb_tags.extend(["=".join([k, str(v)]) for k, v in sweep_specific_params.items()])
     wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
     final_config['wandb_tags'] = wandb_tags
     training(final_config)
@@ -443,7 +409,7 @@ def train_vector_sim(**config):
     default="random",
     help="whether to use RandomNegativeEdges or HierarchyAwareNegativeEdges"
 )
-def train_wordnet(**config):
+def wordnet(**config):
     from .train import training
     wordnet_config = {
         'box_intersection_temp': 0.01,
