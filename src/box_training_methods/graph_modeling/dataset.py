@@ -415,136 +415,6 @@ class RandomNegativeEdges:
         self._breakpoints.to(device)
         return self
 
-'''
-@attr.s(auto_attribs=True)
-class HierarchyAwareNegativeEdges:
-
-    edges: Tensor = attr.ib(validator=_validate_edge_tensor)
-    aggressive_pruning: bool = False
-    negative_ratio: int = 16
-    cache_dir: str = ""
-    graph_name: str = ""
-    load_from_cache: bool = False
-
-    def __attrs_post_init__(self):
-
-        self._device = self.edges.device
-
-        self.G = nx.DiGraph()
-        self.G.add_edges_from((self.edges).tolist()) # assume nodes are numbered contiguously 0 through #nodes
-        self.PAD = len(self.G.nodes)
-
-        if self.load_from_cache:
-            torch.load()
-        
-        else:
-            self.hans_head2tails_dict = self.compute_hans_head2tails()
-            self.hans_tail2heads_dict = self.invert_view(self.hans_head2tails_dict)  # ✓
-            self.aggr_tail2heads_dict = self.compute_aggr_tail2heads()               # ✓
-            
-            # matrices for sampling, depending on hans/aggressive and tail-/head-oriented options
-            self.hans_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.hans_tail2heads_dict)
-            self.aggr_tail2heads_matrix = self.create_packed_padded_matrix_for_sampling(self.aggr_tail2heads_dict)
-
-        if self.aggressive_pruning:
-            self.tail2heads_matrix = self.aggr_tail2heads_matrix
-        else:
-            self.tail2heads_matrix = self.hans_tail2heads_matrix
-        weights = torch.ones(shape=(len(self.G.nodes), 1), dtype=torch.float)
-        weights = torch.vstack([weights, torch.tensor([1e-9])])
-        self.weights = torch.nn.Embedding.from_pretrained(weights, freeze=True, padding_idx=self.PAD)
-
-    def __call__(self, positive_edges: Optional[LongTensor]) -> LongTensor:
-        """
-        Return negative edges for each positive edge.
-
-        :param positive_edges: Positive edges, a LongTensor of indices with shape (..., 2), where [...,0] is the tail
-            node index and [...,1] is the head node index.
-        :return: negative edges, a LongTensor of indices with shape (..., negative_ratio, 2)
-        """
-
-        device = positive_edges.device
-
-        tails = positive_edges[..., 0]
-        negative_heads = self.tail2heads_matrix[tails].long().to(device)
-        negative_heads_weights = self.weights.to(device)(negative_heads).squeeze()
-        
-        wrs = WeightedRandomSampler(weights=negative_heads_weights, num_samples=self.negative_ratio, replacement=True)
-        wrs = list(wrs)
-        negative_idxs = torch.tensor(wrs).to(device)
-        try:
-            negative_heads = torch.gather(negative_heads, -1, negative_idxs)
-        except RuntimeError:
-            # FIXME this happens when we have a leftover batch of one instance
-            negative_heads = torch.gather(negative_heads, -1, negative_idxs.unsqueeze(dim=0))
-
-        # FIXME for nodes with no HNS candidates, this will result in non-hierarchical negative_edges which may impact training
-        #  fix this with masking
-        negative_heads[negative_heads == self.PAD] = -1
-
-        tails = tails.unsqueeze(-1).expand(-1, self.negative_ratio)
-        negative_edges = torch.stack([tails, negative_heads], dim=-1)
-        return negative_edges
-
-    def compute_hans_head2tails(self):
-        hans_head2tails_dict = defaultdict(list)
-        for head in self.G.nodes:
-            negative_tails_mres = self.hans_negative_tails_for_head(head)
-            hans_head2tails_dict[head].extend(negative_tails_mres)
-        return hans_head2tails_dict
-
-    def hans_negative_tails_for_head(self, head):
-        head_and_ancestors = {head} | nx.ancestors(self.G, head)
-        negative_tails = set(self.G.nodes).difference(head_and_ancestors)
-        G_negative_tails = nx.induced_subgraph(self.G, negative_tails)
-        negative_tails_mres = [h for h in negative_tails if G_negative_tails.in_degree(h) == 0]
-        return negative_tails_mres
-
-    def compute_aggr_tail2heads(self):
-
-        assert hasattr(self, "hans_tail2heads_dict")  # relies on previous computations
-
-        aggr_tail2heads = defaultdict(list)
-        for h, heads_h in self.hans_tail2heads_dict.items():
-            G_heads_h = nx.induced_subgraph(self.G, heads_h)  # subgraph of G induced by heads corresponding to tail h in hans edges
-            heads_h_star = [t for t in heads_h if G_heads_h.out_degree(t) == 0]  # keep only terminals of heads-induced subgraph
-            aggr_tail2heads[h] = heads_h_star
-        return aggr_tail2heads
-
-    @staticmethod
-    def invert_view(x_to_Y):
-        y_to_X = {}
-        for x,Y in x_to_Y.items():
-            for y in Y:
-                y_to_X.setdefault(y, []).append(x)
-        return y_to_X
-
-    def create_packed_padded_matrix_for_sampling(self, x_to_Y):
-        sequences = [torch.tensor(x_to_Y.get(h, [self.PAD])) for h in sorted(self.G.nodes)]
-        packed_sequence = pack_sequence(sequences, enforce_sorted=False)
-        Y, _ = pad_packed_sequence(packed_sequence, batch_first=True, padding_value=self.PAD)
-        return Y
-    
-    def cache(self):
-        torch.save(self.hans_tail2heads_matrix,
-                   os.path.join(self.cache_dir, self.graph_name + ".hans.pt"))
-        torch.save(self.aggr_tail2heads_matrix,
-                   os.path.join(self.cache_dir, self.graph_name + ".aggr.pt"))
-    
-    def load(self):
-        self.hans_tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".hans.pt"))
-        self.aggr_tail2heads_matrix = torch.load(os.path.join(self.cache_dir, self.graph_name + ".aggr.pt"))
-
-    @property
-    def device(self):
-        return self._device
-
-    def to(self, device: Union[str, torch.device]):
-        self._device = device
-        self.edges = self.edges.to(device)
-        self.tail2heads_matrix = self.tail2heads_matrix.to(device)
-        return self
-'''
 
 @attr.s(auto_attribs=True)
 class HierarchyAwareNegativeEdges:
@@ -593,7 +463,7 @@ class HierarchyAwareNegativeEdges:
             N[G_tc_edges[:,0], G_tc_edges[:,1]] = 0
 
             logger.info("pruning remaining negative edges according to generalized algorithm")
-            for u in tqdm(nodes[:10]):
+            for u in tqdm(nodes):
                 for y in nodes:
                     if N[u,y] == 1:
                         N[Dec[u], y] = 0
