@@ -488,12 +488,14 @@ class HierarchyAwareNegativeEdges:
         return negative_edges
     
     def stats(self):
+        num_nodes = len(self.G.nodes)
         num_positive_edges = len(self.G.edges)
         num_positive_edges_in_transitive_closure = len(nx.transitive_closure_dag(self.G).edges)
         num_positive_edges_in_transitive_reduction = len(nx.transitive_reduction(self.G).edges)
         num_hierarchy_aware_negative_edges = self.negative_edges.shape[0]
         num_random_negative_edges = (len(self.G.nodes) * (len(self.G.nodes) - 1)) - num_positive_edges_in_transitive_closure
         stats_dict = {
+            "[nodes]": num_nodes,
             "[+edges]": num_positive_edges,
             "[+edges_tc]": num_positive_edges_in_transitive_closure,
             "[+edges_tr]": num_positive_edges_in_transitive_reduction,
