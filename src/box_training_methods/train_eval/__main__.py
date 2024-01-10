@@ -271,6 +271,8 @@ def parse_graph_path(path):  # e.g. /project/pi_mccallum_umass_edu/brozonoyer_um
 
 
 BASE_CONFIG = {
+    'box_intersection_temp': 0.01,
+    'box_volume_temp': 1.0,
     'cuda': True,
     'dim': 64,
     'epochs': 12,   # 12 to catch best-converging runs via best_run()
@@ -285,6 +287,7 @@ BASE_CONFIG = {
     'save_prediction': False,
     'seed': None,
     'task': 'graph_modeling',
+    'tbox_temperature_type': 'global',
     'undirected': None,
     'vector_separate_io': True,
     'vector_use_bias': True,
