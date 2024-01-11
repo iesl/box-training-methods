@@ -58,7 +58,7 @@ python3 create_sweep.py --lr_nw_json ../1_hyperparameter_tuning/ configuration_t
 This will print out the `SWEEP_ID` of the created sweep. Launch the agents for the sweep as follows:
 
 ```
-sbatch --array=1-118 ./launch_agents.sh SWEEP_ID
+sbatch --array=1-65 ./launch_agents.sh SWEEP_ID
 ```
 
 Note that I have created `./partition_assignments.txt` (used by `./launch_agents.sh` in array mode) to utilize all of the gpus allowed for one PhD student as per [Unity documentation](https://docs.unity.rc.umass.edu/documentation/cluster_specs/partitions/gypsum/) (i.e. 12 for `gypsum-m40`, 40 for `gypsum-titanx`, etc.).
