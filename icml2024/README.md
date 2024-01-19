@@ -47,7 +47,7 @@ Finally, change to the next directory for running the experiments on synthetic g
 cd ../2_synthetic_graphs
 ```
 
-## Run tbox synthetic graphs experiments
+## Run synthetic graphs experiments
 
 Create the sweep for all synthetic graphs experiments:
 
