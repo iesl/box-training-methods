@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import os
 import json
+import math
 from itertools import permutations
 from pathlib import Path
 from typing import *
@@ -517,10 +518,9 @@ class GraphModelingEvalLooper:
         # del self.dl.dataset
 
         ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
-
         prediction_scores = np.zeros((num_nodes, num_nodes))
         with torch.no_grad():
-            for batch_idxs in tqdm(batched_pairs(num_nodes, self.batchsize), desc=f"Evaluating", total = num_nodes **2):
+            for batch_idxs in tqdm(batched_pairs(num_nodes, self.batchsize), desc=f"Evaluating", total = math.ceil(num_nodes * (num_nodes - 1) / self.batchsize)):
                 cur_preds = self.model(batch_idxs.to(previous_device)).cpu().numpy()
                 prediction_scores[batch_idxs[:,0], batch_idxs[:,1]] = cur_preds
 
