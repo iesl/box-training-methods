@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import os
 import json
+from itertools import permutations
 from pathlib import Path
 from typing import *
 
@@ -475,6 +476,17 @@ class MultilabelClassificationTrainLooper:
         self.save_instance_model.save_to_disk(None)
 
 
+def batched_pairs(num_nodes, batch_size):
+  batch = []
+  for row_idx, col_idx in permutations(range(num_nodes), 2):
+    batch.append([row_idx, col_idx])
+    if len(batch) == batch_size:
+      yield torch.tensor(batch, dtype=torch.long)
+      batch = []
+  if batch:
+    yield torch.tensor(batch, dtype=torch.long)
+    
+
 @attr.s(auto_attribs=True)
 class GraphModelingEvalLooper:
     name: str
@@ -506,30 +518,11 @@ class GraphModelingEvalLooper:
 
         ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
 
-        prediction_scores = np.zeros((num_nodes, num_nodes))  # .to(previous_device)
-
-        input_x, input_y = np.indices((num_nodes, num_nodes))
-        input_x, input_y = input_x.flatten(), input_y.flatten()
-        input_list = np.stack([input_x, input_y], axis=-1)
-        number_of_entries = len(input_x)
-
+        prediction_scores = np.zeros((num_nodes, num_nodes))
         with torch.no_grad():
-            pbar = tqdm(
-                desc=f"[{self.name}] Evaluating", leave=False, total=number_of_entries
-            )
-            cur_pos = 0
-            while cur_pos < number_of_entries:
-                last_pos = cur_pos
-                cur_pos += self.batchsize
-                if cur_pos > number_of_entries:
-                    cur_pos = number_of_entries
-
-                ids = torch.tensor(input_list[last_pos:cur_pos], dtype=torch.long)
-                cur_preds = self.model(ids.to(previous_device)).cpu().numpy()
-                prediction_scores[
-                    input_x[last_pos:cur_pos], input_y[last_pos:cur_pos]
-                ] = cur_preds
-                pbar.update(self.batchsize)
+            for batch_idxs in tqdm(batched_pairs(num_nodes, self.batchsize), desc=f"Evaluating", total = num_nodes **2):
+                cur_preds = self.model(batch_idxs.to(previous_device)).cpu().numpy()
+                prediction_scores[batch_idxs[:,0], batch_idxs[:,1]] = cur_preds
 
         prediction_scores_no_diag = prediction_scores[~np.eye(num_nodes, dtype=bool)]
         ground_truth_no_diag = ground_truth[~np.eye(num_nodes, dtype=bool)]

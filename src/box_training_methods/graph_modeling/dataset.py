@@ -514,7 +514,10 @@ class HierarchyAwareNegativeEdges:
             json.dump(self.stats(), f, indent=4, sort_keys=False)
     
     def load(self):
-        self.negative_edges = torch.load(os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+        neg_pt_fpath = os.path.join(self.cache_dir, self.graph_name + ".neg.pt")
+        logger.info(f"loading negative edges from cache at {neg_pt_fpath}")
+        self.negative_edges = torch.load(neg_pt_fpath)
+        logger.info(f"done loading negative edges from cache")
 
     @property
     def device(self):
