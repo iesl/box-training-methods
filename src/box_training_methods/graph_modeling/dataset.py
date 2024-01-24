@@ -463,9 +463,10 @@ class HierarchyAwareNegativeEdges:
             N[G_tc_edges[:,0], G_tc_edges[:,1]] = 0
 
             logger.info("pruning remaining negative edges according to generalized algorithm")
+            N2 = N.copy()
             for u in tqdm(nodes):
                 for y in nodes:
-                    if N[u,y] == 1:
+                    if N2[u,y] == 1:
                         N[Dec[u], y] = 0
                         N[u, Anc[y]] = 0
 
@@ -576,40 +577,25 @@ class GraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    # edges = [(0,1), (0,2), (1,3), (1,4), (2,5), (2,6), (3,7), (4,7), (4,8), (5,8)]
-
-    # G = nx.DiGraph()
-    # G.add_edges_from(edges)
-    # HNE = HierarchicalNegativeEdges(
-    #     edges=torch.tensor(list(G.edges)), sampling_strategy="uniform"
-    # )
-
-    # G_tr = nx.transitive_reduction(G)
-    # HNE_tr = HierarchicalNegativeEdges(
-    #     edges=torch.tensor(list(G_tr.edges)), sampling_strategy="uniform"
-    # )
-
-    # G_tc = nx.transitive_reduction(G)
-    # HNE_tc = HierarchicalNegativeEdges(
-    #     edges=torch.tensor(list(G_tc.edges)), sampling_strategy="uniform"
-    # )
-
-    # assert torch.equal(HNE.negative_roots, HNE_tr.negative_roots)
-    # assert torch.equal(HNE.negative_roots, HNE_tc.negative_roots)
-    
-    # edges = [(0,2), (0,3), (1,5), (2,4), (4,5), (5,6)]
-    # edges = [(0,1), (1,2), (2,3), (4,5), (5,6), (6,7)]
-
     print("loading graph edges and num nodes")
     # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full_tc.npz")
     # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=True/10.npz")
-    edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
+    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
+    edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/415728013.npz")
     print("creating digraph")
     G = nx.DiGraph()
     G.add_edges_from(edges)
 
+    H0 = HierarchyAwareNegativeEdges(
+        edges=torch.tensor(list(G.edges)),
+        negative_ratio=4,
+        cache_dir=os.path.dirname("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/"),
+        graph_name="415728013",
+        load_from_cache=True,
+    )
+
     print("start hierarchy-aware")
-    H = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
+    H1 = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
     print("end hierarchy-aware")
 
     # R = RandomNegativeEdges(
