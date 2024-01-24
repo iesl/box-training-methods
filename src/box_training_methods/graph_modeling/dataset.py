@@ -471,7 +471,7 @@ class HierarchyAwareNegativeEdges:
                         N[u, Anc[y]] = 0
 
             self.negative_edges = torch.tensor(np.stack(N.nonzero()).T)     # (num_negative_edges, 2)
-            del N
+            self.N = N
 
             logger.info("finished calculating hierarchy-aware negative edges")
 
@@ -510,6 +510,7 @@ class HierarchyAwareNegativeEdges:
 
     def cache(self):
         torch.save(self.negative_edges, os.path.join(self.cache_dir, self.graph_name + ".neg.pt"))
+        torch.save(self.N, os.path.join(self.cache_dir, self.graph_name + ".N.pt"))
         with open(os.path.join(self.cache_dir, self.graph_name + ".icml2024stats.json"), "w") as f:
             json.dump(self.stats(), f, indent=4, sort_keys=False)
     
