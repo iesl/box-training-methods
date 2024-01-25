@@ -403,6 +403,12 @@ def synthetic_graphs(**config):
 
 @click.command(context_settings=dict(show_default=True),)
 @click.option(
+    "--log_interval",
+    type=IntOrPercent(),
+    default=0.1,
+    help="interval or percentage (as float in [0,1]) of examples to train between logging training metrics",
+)
+@click.option(
     "--model_type",
     type=click.Choice(["tbox", "vector_sim"])
 )
@@ -425,7 +431,6 @@ def wordnet_full(**config):
         'learning_rate': 0.1,
         'log_batch_size': 5,
         'log_eval_batch_size': 22,
-        'log_interval': 10,
         'negative_ratio': 128,
         'negative_weight': 0.9,
         'negatives_permutation_option': 'none',
