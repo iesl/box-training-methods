@@ -8,8 +8,12 @@ import matplotlib.pyplot as plt
 PATH = "hierarchical-negative-sampling/icml2024"
 
 
-def plot(tbox_random, tbox_hierarchical, vector_sim_random, vector_sim_hierarchical, title, fpath):
-    tbox_random_means, tbox_random_stddevs, avg_percentage_reduction_in_negative_edges = get_means_stddevs_stats(tbox_random, get_avg_percentage_reduction_in_negative_edges=True)
+def plot(tbox_random, tbox_hierarchical, vector_sim_random, vector_sim_hierarchical, title, fpath, get_avg_percentage_reduction_in_negative_edges=True):
+    if get_avg_percentage_reduction_in_negative_edges:
+        tbox_random_means, tbox_random_stddevs, avg_percentage_reduction_in_negative_edges = get_means_stddevs_stats(tbox_random, get_avg_percentage_reduction_in_negative_edges=True)
+    else:
+        tbox_random_means, tbox_random_stddevs = get_means_stddevs_stats(tbox_random, get_avg_percentage_reduction_in_negative_edges=get_avg_percentage_reduction_in_negative_edges)
+        avg_percentage_reduction_in_negative_edges = None
     tbox_hierarchical_means, tbox_hierarchical_stddevs = get_means_stddevs_stats(tbox_hierarchical)
     vector_sim_random_means, vector_sim_random_stddevs = get_means_stddevs_stats(vector_sim_random)
     vector_sim_hierarchical_means, vector_sim_hierarchical_stddevs = get_means_stddevs_stats(vector_sim_hierarchical)
@@ -65,9 +69,10 @@ def plot_error_regions(means, stds, colors, labels, title, fpath, avg_percentage
     plt.xlabel("Step")
     plt.ylabel("[Eval] F1")
     plt.title(title)
-    if "balanced_tree" in title:
-        plt.legend(title=f'Reduction in negative edges: {avg_percentage_reduction_in_neg_edges}%')
-    else:
+    if avg_percentage_reduction_in_neg_edges is not None:
+        # if "balanced_tree" in title:
+        #     plt.legend(title=f'Reduction in negative edges: {avg_percentage_reduction_in_neg_edges}%')
+        # else:
         plt.legend(title=f'Average reduction in negative edges: {avg_percentage_reduction_in_neg_edges}%')
     plt.grid(True)
     plt.savefig(fpath)
@@ -148,10 +153,38 @@ def main(args):
                         plot(tbox_random, tbox_hierarchical, vector_sim_random, vector_sim_hierarchical, title, fpath)
 
 
+def plot_avg_for_graph_type(args):
+
+    api = wandb.Api()
+    sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/{args.sweep_id}")
+    runs = [r for r in sweep.runs if f"graph_type={args.graph_type}" in set(r.tags)]
+
+    if args.graph_type == "balanced_tree":
+        title = "Balanced Tree"
+    elif args.graph_type == "price":
+        title = "Price's network"
+    else:
+        title = "nCRP"
+    
+    base_fpath = f"./plots/average"
+    fpath = f"{base_fpath}/{args.graph_type}.png"
+
+    tbox_random = [r for r in runs if ({"negative_sampler=random", "model_type=tbox"}).issubset(set(r.tags))]
+    tbox_hierarchical = [r for r in runs if ({"negative_sampler=hierarchical", "model_type=tbox"}).issubset(set(r.tags))]
+    vector_sim_random = [r for r in runs if ({"negative_sampler=random", "model_type=vector_sim"}).issubset(set(r.tags))]
+    vector_sim_hierarchical = [r for r in runs if ({"negative_sampler=hierarchical", "model_type=vector_sim"}).issubset(set(r.tags))]
+    plot(tbox_random, tbox_hierarchical, vector_sim_random, vector_sim_hierarchical, title, fpath, get_avg_percentage_reduction_in_negative_edges=True)
+
+
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--sweep_id", type=str, help="synthetic graphs sweep id", default="mpckfmmj", required=True)
+    parser.add_argument("--plot_average", action="store_true", required=False)
+    parser.add_argument("--graph_type", type=str, required=False)
     args = parser.parse_args()
 
-    main(args)
+    if args.plot_average:
+        plot_avg_for_graph_type(args)
+    else:
+        main(args)
