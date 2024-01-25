@@ -412,7 +412,7 @@ def synthetic_graphs(**config):
     default="random",
     help="whether to use RandomNegativeEdges or HierarchyAwareNegativeEdges"
 )
-def wordnet(**config):
+def wordnet_full(**config):
     from .train import training
     wordnet_config = {
         'box_intersection_temp': 0.01,
@@ -420,18 +420,17 @@ def wordnet(**config):
         'cuda': True,
         'data_path': '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz',
         'dim': 64,
-        'epochs': 500,
+        'epochs': 1000,
         'eval': True,
-        'learning_rate': 0.2,
-        'log_batch_size': 9,
-        'log_eval_batch_size': 0,
-        'log_interval': 0.2,
+        'learning_rate': 0.1,
+        'log_batch_size': 5,
+        'log_eval_batch_size': 22,
+        'log_interval': 10,
         'negative_ratio': 128,
         'negative_weight': 0.9,
         'negatives_permutation_option': 'none',
         'output_dir': None,
         'patience': 10000,
-        'sample_positive_edges_from_tc_or_tr': 'tr',
         'save_model': False,
         'save_prediction': False,
         'seed': None,
@@ -443,4 +442,8 @@ def wordnet(**config):
         'wandb': True,
     }
     wordnet_config.update(config)
+    if config["negative_sampler"] == "hierarchical":
+        wordnet_config["sample_positive_edges_from_tc_or_tr"] = "tr"
+    else:
+        wordnet_config["sample_positive_edges_from_tc_or_tr"] = "tc"
     training(wordnet_config)
