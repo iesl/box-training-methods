@@ -37,7 +37,7 @@ def plot_error_regions(means, stds, colors, labels, markers, title, fpath, red_p
     if not all(len(means[i]) == len(stds[i]) for i in range(num_sets)):
         raise ValueError("Means and standard deviations must have the same length.")
 
-    x_values = np.arange(len(means[0]))
+    x_values = np.arange(len(means[0])) * 0.2
 
     plt.figure(figsize=(10, 6))
 
@@ -58,8 +58,8 @@ def plot_error_regions(means, stds, colors, labels, markers, title, fpath, red_p
             alpha=0.2
         )
 
-    plt.xlabel("Step")
-    plt.ylabel("[Eval] F1")
+    plt.xlabel("Epoch")
+    plt.ylabel("F1")
     plt.title(title)
 
     # plt.legend(title=f'Average reduction in + edges: {red_pos}%\nAverage reduction in - edges: {red_neg}%\nAverage reduction in total edges: {red_tot}%')
@@ -120,7 +120,7 @@ def main(args):
         base_tags = {f"negative_ratio={negative_ratio}"}
         base_fpath = f"./plots/main"
 
-        for graph_type in ["price"]:#["balanced_tree", "nested_chinese_restaurant_process", "price"]:
+        for graph_type in ["balanced_tree", "nested_chinese_restaurant_process"]:#, "price"]:
 
             tags = base_tags | {f"graph_type={graph_type}"}
 

@@ -430,7 +430,7 @@ def wordnet_full(**config):
         'eval': True,
         'learning_rate': 0.1,
         'log_batch_size': 5,
-        'log_eval_batch_size': 22,
+        'log_eval_batch_size': 17,
         'negative_ratio': 128,
         'negative_weight': 0.9,
         'negatives_permutation_option': 'none',

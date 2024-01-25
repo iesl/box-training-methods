@@ -530,9 +530,6 @@ class GraphModelingEvalLooper:
         time2 = time.time()
         logger.debug(f"Evaluation time: {time2 - time1}")
 
-        # TODO: release self.dl from gpu
-        del input_x, input_y
-
         logger.debug("Calculating optimal F1 score")
         metrics = calculate_optimal_F1(ground_truth_no_diag, prediction_scores_no_diag)
         time3 = time.time()
