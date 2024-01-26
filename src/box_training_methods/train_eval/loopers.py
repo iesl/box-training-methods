@@ -524,9 +524,11 @@ class GraphModelingEvalLooper:
                 cur_preds = self.model(batch_idxs.to(previous_device)).cpu().numpy()
                 prediction_scores[batch_idxs[:,0], batch_idxs[:,1]] = cur_preds
 
+        logger.debug("removing diag from prediction scores")
         prediction_scores_no_diag = prediction_scores[~np.eye(num_nodes, dtype=bool)]
+        logger.debug("removing diag from ground truth")
         ground_truth_no_diag = ground_truth[~np.eye(num_nodes, dtype=bool)]
-
+        
         time2 = time.time()
         logger.debug(f"Evaluation time: {time2 - time1}")
 

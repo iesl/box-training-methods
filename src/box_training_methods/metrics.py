@@ -56,12 +56,18 @@ def numpy_metrics(targets: np.ndarray, predictions: np.ndarray) -> Dict[str, flo
 
 
 def calculate_optimal_F1(targets, scores) -> Dict[str, float]:
+    logger.debug("calculating roc_curve")
     fpr, tpr, thresholds = sklearn.metrics.roc_curve(
         targets, scores, drop_intermediate=False
     )
+    logger.debug("calculating auc")
     auc = sklearn.metrics.auc(fpr, tpr)
+    logger.debug("calculating num_pos")
     num_pos = targets.sum()
+    logger.debug("calculating num_neg")
     num_neg = (1 - targets).sum()
+    logger.debug("calculating f1")
     f1 = 2 * tpr / (1 + tpr + fpr * num_neg / num_pos)
+    logger.debug("calculating threshold")
     threshold = thresholds[np.argmax(f1)]
     return {"F1": float(np.max(f1)), "AUC": float(auc), "threshold": threshold}
