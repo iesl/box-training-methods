@@ -24,9 +24,6 @@ def main():
         "negative_sampler": {
             "values": ["hierarchical", "random"]
         },
-        "log_interval": {
-            "values": [10, 100]
-        }
     },
     "program": "/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/scripts/box-training-methods"
     }
