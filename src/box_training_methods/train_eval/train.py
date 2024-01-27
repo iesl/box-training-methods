@@ -233,6 +233,7 @@ def setup(**config):
             eval_loopers=eval_loopers,
             log_interval=config["log_interval"],
             early_stopping=EarlyStopping("Loss", config["patience"]),
+            wordnet_save_model_tags={"model_type": config["model_type"], "negative_sampler": config["negative_sampler"]}
         )
     elif config["task"] in {"multilabel_classification", "bioasq"}:
         train_looper = MultilabelClassificationTrainLooper(

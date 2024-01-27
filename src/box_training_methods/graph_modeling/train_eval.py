@@ -216,7 +216,7 @@ def setup_model(
     if not eval_only:
         return model, loss_func
     
-    model.load_state_dict(torch.load(config["box_model_path"]))
+    model.load_state_dict(torch.load(config["model_checkpoint"]))
 
     return model
 

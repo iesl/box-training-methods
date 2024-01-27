@@ -403,12 +403,6 @@ def synthetic_graphs(**config):
 
 @click.command(context_settings=dict(show_default=True),)
 @click.option(
-    "--log_interval",
-    type=IntOrPercent(),
-    default=0.1,
-    help="interval or percentage (as float in [0,1]) of examples to train between logging training metrics",
-)
-@click.option(
     "--model_type",
     type=click.Choice(["tbox", "vector_sim"])
 )
@@ -426,11 +420,12 @@ def wordnet_full(**config):
         'cuda': True,
         'data_path': '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz',
         'dim': 64,
-        'epochs': 1000,
+        'epochs': 500,
         'eval': True,
         'learning_rate': 0.1,
         'log_batch_size': 5,
         'log_eval_batch_size': 17,
+        'log_interval': 0.2,
         'negative_ratio': 128,
         'negative_weight': 0.9,
         'negatives_permutation_option': 'none',
@@ -452,3 +447,33 @@ def wordnet_full(**config):
     else:
         wordnet_config["sample_positive_edges_from_tc_or_tr"] = "tc"
     training(wordnet_config)
+
+
+@click.command(context_settings=dict(show_default=True),)
+@click.option(
+    "--model_type",
+    type=click.Choice(["tbox", "vector_sim"])
+)
+@click.option(
+    "--model_checkpoint",
+    type=str,
+)
+def wordnet_full_eval(**config):
+    from .eval import evaluation
+
+    wordnet_eval_config = {        
+        'box_intersection_temp': 0.01,
+        'box_volume_temp': 1.0,
+        'cuda': True,
+        'data_path': '/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz',
+        'dim': 64,
+        'log_eval_batch_size': 17,
+        "task": "graph_modeling",
+        'tbox_temperature_type': 'global',
+        'undirected': None,
+        'vector_separate_io': True,
+        'vector_use_bias': True,
+        'wandb': False,
+    }
+    config.update(wordnet_eval_config)
+    evaluation(config)

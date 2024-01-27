@@ -33,7 +33,7 @@ def evaluation(config: Dict) -> None:
     Setup and run evaluation loop.
     In this function we do any config manipulation required (eg. override values, set defaults, etc.)
 
-    In practice we only need a separate eval procedure for BioASQ task, given its size
+    In practice we only need a separate eval procedure for BioASQ and WordNet tasks, given their size
     
     :param config: config dictionary
     :return: None
@@ -61,7 +61,7 @@ def evaluation(config: Dict) -> None:
 
 def setup(**config):
     """
-    Setup and return the datasets, dataloaders, model, and training loop required for training.
+    Setup and return the datasets, dataloaders, model, and eval loop required for evaluation.
 
     :param config: config dictionary
     :return: Tuple of dataset collection, dataloader collection, model, and train looper
@@ -75,9 +75,9 @@ def setup(**config):
     device = cuda_if_available(use_cuda=config["cuda"])
 
     if config["task"] == "graph_modeling":
-        dataset = task_train_eval.setup_training_data(device, eval_only=True, **config)
-        dataloader =  TensorDataLoader(dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
-        model = task_train_eval.setup_model(dataset.num_nodes, device=device, eval_only=True, **config)
+        # dataset = task_train_eval.setup_training_data(device, eval_only=True, **config)
+        # dataloader =  TensorDataLoader(dataset, batch_size=2 ** config["log_batch_size"], shuffle=False)
+        model = task_train_eval.setup_model(num_nodes=82115, device=device, eval_only=True, **config)   # hardcode for WordNet
     elif config["task"] == "bioasq":
         dev_dataset, test_dataset = task_train_eval.setup_mesh_training_data(device, eval_only=True, **config)
         dev_dataloader = DataLoader(dev_dataset, batch_size=2 ** config["log_batch_size"], collate_fn=dev_dataset.collate_mesh_fn)#, num_workers=12)
@@ -95,9 +95,11 @@ def setup(**config):
             GraphModelingEvalLooper(
                 name="Eval",
                 model=model,
-                dl=dataloader,
+                dl=None,
                 batchsize=2 ** config["log_eval_batch_size"],
-                output_dir=config["output_dir"],
+                # output_dir=config["output_dir"],
+                no_f1_save_matrices=True,
+                model_checkpoint_fpath=config["model_checkpoint"],
             )
         )
     elif config["task"] == "bioasq":
