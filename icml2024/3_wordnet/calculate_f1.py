@@ -25,6 +25,6 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--prediction_scores_no_diag_npz", type=str)
-    args = parser.parse_args
+    args = parser.parse_args()
 
     main(args)

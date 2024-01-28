@@ -535,9 +535,9 @@ class GraphModelingEvalLooper:
             logger.debug("h")
             ckpt_info = self.model_checkpoint_fpath.split("/")[-1].split(".")[-2]       # e.g. "epoch=20-vector_sim-hierarchical"
             logger.debug("i")
-            save_matrices_fpath = f"/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/icml2024_wordnet_prediction_scores_no_diag/{ckpt_info}.npz"
+            save_preds_fpath = f"/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/icml2024_wordnet_prediction_scores_no_diag/{ckpt_info}.npy"
             logger.debug("j")
-            np.savez_compressed(save_matrices_fpath, prediction_scores_no_diag=prediction_scores_no_diag)
+            np.save(save_preds_fpath, prediction_scores_no_diag)
             logger.debug("k")
             return
         ######################################################################################################
