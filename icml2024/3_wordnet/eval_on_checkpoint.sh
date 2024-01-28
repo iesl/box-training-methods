@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -c 4
-#SBATCH -p gypsum-rtx8000
+#SBATCH -p gypsum-2080ti
 #SBATCH --gpus=1
 #SBATCH --mem=256G
 #SBATCH -t 8:00:00
