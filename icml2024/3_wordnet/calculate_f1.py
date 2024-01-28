@@ -8,7 +8,7 @@ from box_training_methods.graph_modeling.dataset import edges_and_num_nodes_from
 
 def main(args):
     
-    prediction_scores_no_diag = np.load(args.prediction_scores_no_diag_npz)['prediction_scores_no_diag']
+    prediction_scores_no_diag = np.load(args.prediction_scores_no_diag_npy)['prediction_scores_no_diag']
     ground_truth = np.zeros((82115, 82115))
     pos_index, _ = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz")
     ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
@@ -24,7 +24,7 @@ def main(args):
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prediction_scores_no_diag_npz", type=str)
+    parser.add_argument("--prediction_scores_no_diag_npy", type=str)
     args = parser.parse_args()
 
     main(args)
