@@ -31,7 +31,7 @@ def graph_hparams_to_str(graph_type, graph_hparams):
 
 def main():
 
-    header = ["Graph Type", "$\Theta$", "$\EE[|V|]$", "$\EE[|E|]$", "$\EE[|E^{\mathrm{tc}}|]$", "$\EE[|E^{\mathrm{tr}}|]$", "$\EE[|\overline E|]$", "$\EE[|E_{H^*}|]$", "$\EE[|E^{\mathrm{tr}}| / |E^{\mathrm{tc}}|]$", "$\EE[|E_{H^*}| / |\overline E|]$", "$\EE[|\mathrm{reduced}| / |\mathrm{full}|]$"]
+    header = ["Graph Type", "$\Theta$", "$\EE[|V|]$", "$\EE[|E|]$", "$\EE[|E^{\mathrm{tc}}|]$", "$\EE[|E^{\mathrm{tr}}|]$", "$\EE[|\overline E|]$", "$\EE[|E_{H^*}|]$", "$\EE[|E| / |\overline E|]$", "$\EE[|E^{\mathrm{tr}}| / |E^{\mathrm{tc}}|]$", "$\EE[|E_{H^*}| / |\overline E|]$", "$\EE[|\mathrm{reduced}| / |\mathrm{full}|]$"]
 
     graph_info = defaultdict(list)
     for graph_dir in GRAPH_DIR_PATHS:
@@ -56,12 +56,12 @@ def main():
     for graph_type in ["balanced_tree", "nested_chinese_restaurant_process", "price", "wordnet"]:
         hparams_stats = sorted(graph_info[graph_type], key=lambda x: x[0])
         for (hparams_str, stats) in hparams_stats:
-            row = [hparams_str, stats["[nodes]"], stats["[+edges]"], stats["[+edges_tc]"], stats["[+edges_tr]"], stats["[-edges_r]"], stats["[-edges_h]"], str(round(100 * stats["[+edges_tr] / [+edges_tc]"], 2)) + "\%", str(round(100 * stats["[-edges_h] / [-edges_r]"], 2)) + "\%", str(round(100 * stats["([+edges_tr] + [-edges_h]) / ([+edges_tc] + [-edges_r])"], 2)) + "\%"]
+            row = [hparams_str, stats["[nodes]"], stats["[+edges]"], stats["[+edges_tc]"], stats["[+edges_tr]"], stats["[-edges_r]"], stats["[-edges_h]"], str(round(100 * (stats["[+edges]"] / stats["[-edges_r]"]), 4)) + "\%", str(round(100 * stats["[+edges_tr] / [+edges_tc]"], 2)) + "\%", str(round(100 * stats["[-edges_h] / [-edges_r]"], 2)) + "\%", str(round(100 * stats["([+edges_tr] + [-edges_h]) / ([+edges_tc] + [-edges_r])"], 2)) + "\%"]
             row = [str(x) for x in row]
             table_dict[graph_type].append(row)
 
     prefix = "\\begin{landscape}\n\\begin{table}[p]\n\centering\n\\resizebox{1.2\\textwidth}{!}{%\n\\begin{tabular}{|c|c|c|c|c|c|c|c|c|c|c|c|}\n\hline"
-    postfix = "\end{tabular}}\n\caption{Example Table}\n\label{tab:example}\n\end{table}\end{landscape}"
+    postfix = "\end{tabular}}\n\caption{Statistics for the synthetic transitively-closed DAGs plus WordNet used in our experiments (\Cref{sec:experiments}), counts for the number of positive/negative edges in the equivalent and optimal distinguishing sidigraphs, and the ratios for the $\mathrm{full}$ and $\mathrm{reduced}$ experimental settings. While graphs under Balanced Tree and WordNet are deterministic, the values of each entry for nCRP and Price are averaged over 10 random seeds, hence the expectation in the table header.}\n\label{tab:example}\n\end{table}\n\end{landscape}\n"
     header_str = ' & '.join(header) + '\\\\\n\hline'
 
     balanced_tree_str = '\multirow{4}{*}{Balanced Tree} '

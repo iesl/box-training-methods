@@ -1,6 +1,4 @@
-import argparse
 import wandb
-import json
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -124,7 +122,7 @@ def main():
                 tags = {f"graph_type={graph_type}", f"negative_ratio={negative_ratio}"}
                 print(tags)
                 print(positive_with_random, positive_with_hierarchical)
-                
+
                 fpath = f"./plots.v2/{graph_type}.k={negative_ratio}.+random={positive_with_random}.+hierarchical={positive_with_hierarchical}.png"
 
                 if graph_type == "price": 

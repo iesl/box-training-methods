@@ -1,5 +1,5 @@
 # Box Training Methods
-This repository contains code which accompanies the paper [Capacity and Bias of Learned Geometric Embeddings for Directed Graphs (Boratko et al. 2021)](https://proceedings.neurips.cc/paper/2021/hash/88d25099b103efd638163ecb40a55589-Abstract.html).
+<!--This repository contains code which accompanies the paper [Capacity and Bias of Learned Geometric Embeddings for Directed Graphs (Boratko et al. 2021)](https://proceedings.neurips.cc/paper/2021/hash/88d25099b103efd638163ecb40a55589-Abstract.html).
 
 This code includes implementations of many geometric embedding methods:
 - Vector Similarity and Distance
@@ -14,7 +14,7 @@ This code includes implementations of many geometric embedding methods:
 - Gumbel Box Embeddings [(Dasgupta et al. 2020)](https://arxiv.org/abs/2010.04831)
 - t-Box model as described in section 3 of [(Boratko et al. 2021)](https://proceedings.neurips.cc/paper/2021/hash/88d25099b103efd638163ecb40a55589-Abstract.html)
 
-It also provides a general-purpose pipeline to explore correlation between graph characteristics and models' learning capabilities.
+It also provides a general-purpose pipeline to explore correlation between graph characteristics and models' learning capabilities.-->
 
 ## Installation
 
@@ -107,7 +107,7 @@ CUDA_LAUNCH_BLOCKING=1 CUDA_VISIBLE_DEVICES=0 /usr/bin/env python scripts/box-tr
 --bioasq_huggingface_encoder microsoft/biogpt
 ```
 
-## Citations
+<!--## Citations
 If you found the code contained in this repository helpful in your research, please cite the following papers:
 
 ```
@@ -124,5 +124,4 @@ If you found the code contained in this repository helpful in your research, ple
   year={2022}
 }
 ```
-
-
+-->

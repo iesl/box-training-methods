@@ -537,7 +537,7 @@ class GraphModelingEvalLooper:
             logger.debug("i")
             save_preds_fpath = f"/scratch/workspace/wenlongzhao_umass_edu-hans/icml2024_wordnet_prediction_scores_no_diag/{ckpt_info}.npy"
             logger.debug("j")
-            np.save(save_preds_fpath, prediction_scores_no_diag)
+            np.save(save_preds_fpath, prediction_scores_no_diag.astype(np.float16))
             logger.debug("k")
             return
         ######################################################################################################
