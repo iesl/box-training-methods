@@ -89,18 +89,18 @@ class GraphModelingTrainLooper:
                 with torch.enable_grad():
                     self.train_loop(epoch)
 
-                    ## SAVE WORDNET MODEL CHECKPOINT
-                    if epoch % 10 == 0:
-                        model_save_dir = "/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/icml2024_wordnet_models/"
-                        filename = f'wordnet_full.epoch={epoch}-{self.wordnet_save_model_tags["model_type"]}-{self.wordnet_save_model_tags["negative_sampler"]}.pt'
-                        model_save_fpath = model_save_dir + filename
-                        logger.info(f"saving wordnet model to {model_save_fpath}")
-                        model_state_dict = {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
-                        torch.save(model_state_dict, model_save_fpath)
-                        logger.info("saved wordnet model checkpoint")
+                    # ## SAVE WORDNET MODEL CHECKPOINT
+                    # if epoch % 10 == 0:
+                    #     model_save_dir = "/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/icml2024_wordnet_models/"
+                    #     filename = f'wordnet_full.epoch={epoch}-{self.wordnet_save_model_tags["model_type"]}-{self.wordnet_save_model_tags["negative_sampler"]}.pt'
+                    #     model_save_fpath = model_save_dir + filename
+                    #     logger.info(f"saving wordnet model to {model_save_fpath}")
+                    #     model_state_dict = {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
+                    #     torch.save(model_state_dict, model_save_fpath)
+                    #     logger.info("saved wordnet model checkpoint")
 
-                    # for eval_looper in self.eval_loopers:
-                    #     eval_looper.loop(epoch=epoch, save_dir=self.save_model.run_dir)
+                    for eval_looper in self.eval_loopers:
+                        eval_looper.loop(epoch=epoch, save_dir=self.save_model.run_dir)
 
                     # # 2D TBOX VISUALIZATION INFO
                     # if isinstance(self.model, TBox):
@@ -507,53 +507,54 @@ class GraphModelingEvalLooper:
     output_dir: str = None
     no_f1_save_matrices: bool = False       # flag to be enabled for WordNet which runs out of memory at F1 step — save matrices to disk
     model_checkpoint_fpath: str = None      # pass along model checkpoint for WordNet eval to parse its name
+    config: Dict = None         # config for all necessary identifying info
 
     @torch.no_grad()
     def loop(self, epoch: Optional[int] = None, save_dir: Optional[str] = None) -> Dict[str, Any]:
         self.model.eval()
 
-        ## WORDNET EVAL SAVE MATRICES BEFORE CALCULATING F1, CALCULATE F1 SEPARATELY ON CPU WITH MORE MEMORY
-        if self.no_f1_save_matrices:
-            logger.debug("a")
-            previous_device = next(iter(self.model.parameters())).device
-            logger.debug("b")
-            ground_truth = np.zeros((82115, 82115))
-            logger.debug("c")
-            pos_index, _ = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz")
-            logger.debug("d")
-            ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
-            logger.debug("e")
-            prediction_scores = np.zeros((82115, 82115))
-            logger.debug("f")
-            with torch.no_grad():
-                for batch_idxs in tqdm(batched_pairs(82115, self.batchsize), desc=f"Evaluating", total = math.ceil(82115 * (82115 - 1) / self.batchsize)):
-                    cur_preds = self.model(batch_idxs.to(previous_device)).cpu().numpy()
-                    prediction_scores[batch_idxs[:,0], batch_idxs[:,1]] = cur_preds
-            prediction_scores_no_diag = prediction_scores[~np.eye(82115, dtype=bool)]
-            logger.debug("g")
-            ground_truth_no_diag = ground_truth[~np.eye(82115, dtype=bool)]
-            logger.debug("h")
-            ckpt_info = self.model_checkpoint_fpath.split("/")[-1].split(".")[-2]       # e.g. "epoch=20-vector_sim-hierarchical"
-            logger.debug("i")
-            save_preds_fpath = f"/scratch/workspace/wenlongzhao_umass_edu-hans/icml2024_wordnet_prediction_scores_no_diag/{ckpt_info}.npy"
-            logger.debug("j")
-            np.save(save_preds_fpath, prediction_scores_no_diag.astype(np.float16))
-            logger.debug("k")
-            return
-        ######################################################################################################
+        # ## WORDNET EVAL SAVE MATRICES BEFORE CALCULATING F1, CALCULATE F1 SEPARATELY ON CPU WITH MORE MEMORY
+        # if self.no_f1_save_matrices:
+        #     logger.debug("a")
+        #     previous_device = next(iter(self.model.parameters())).device
+        #     logger.debug("b")
+        #     ground_truth = np.zeros((82115, 82115))
+        #     logger.debug("c")
+        #     pos_index, _ = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full.npz")
+        #     logger.debug("d")
+        #     ground_truth[pos_index[:, 0], pos_index[:, 1]] = 1
+        #     logger.debug("e")
+        #     prediction_scores = np.zeros((82115, 82115))
+        #     logger.debug("f")
+        #     with torch.no_grad():
+        #         for batch_idxs in tqdm(batched_pairs(82115, self.batchsize), desc=f"Evaluating", total = math.ceil(82115 * (82115 - 1) / self.batchsize)):
+        #             cur_preds = self.model(batch_idxs.to(previous_device)).cpu().numpy()
+        #             prediction_scores[batch_idxs[:,0], batch_idxs[:,1]] = cur_preds
+        #     prediction_scores_no_diag = prediction_scores[~np.eye(82115, dtype=bool)]
+        #     logger.debug("g")
+        #     ground_truth_no_diag = ground_truth[~np.eye(82115, dtype=bool)]
+        #     logger.debug("h")
+        #     ckpt_info = self.model_checkpoint_fpath.split("/")[-1].split(".")[-2]       # e.g. "epoch=20-vector_sim-hierarchical"
+        #     logger.debug("i")
+        #     save_preds_fpath = f"/scratch/workspace/wenlongzhao_umass_edu-hans/icml2024_wordnet_prediction_scores_no_diag/{ckpt_info}.npy"
+        #     logger.debug("j")
+        #     np.save(save_preds_fpath, prediction_scores_no_diag.astype(np.float16))
+        #     logger.debug("k")
+        #     return
+        # ######################################################################################################
 
         logger.debug("Evaluating model predictions on full adjacency matrix")
         time1 = time.time()
         previous_device = next(iter(self.model.parameters())).device
-        # num_nodes = self.dl.dataset.num_nodes
         num_nodes = self.dl.sampler.data_source.num_nodes
         ground_truth = np.zeros((num_nodes, num_nodes))
-        # pos_index = self.dl.dataset.edges.cpu().numpy()
-        if self.dl.sampler.data_source.graph_npz_file is not None:
-            # for the HANS graph modeling experiments, this will load original TC graph regardless of whether training_edges are TC or TR
+
+        breakpoint()
+        if self.config["mesh"] != 1:
             pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
         else:
-            pos_index = self.dl.sampler.data_source.edges_tc.cpu().numpy()
+            pos_index = torch.load(self.config["data_path"])
+        pos_index = torch.tensor(list(nx.transitive_closure(nx.DiGraph(pos_index.tolist())).edges))
         # # release RAM
         # del self.dl.dataset
 

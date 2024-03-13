@@ -203,6 +203,7 @@ def setup(**config):
                     dl=train_dataloader,
                     batchsize=2 ** config["log_eval_batch_size"],
                     output_dir=config["output_dir"],
+                    config=config
                 )
             )
         elif config["task"] in {"multilabel_classification", "bioasq"}:

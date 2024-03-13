@@ -275,7 +275,7 @@ BASE_CONFIG = {
     'box_volume_temp': 1.0,
     'cuda': True,
     'dim': 64,
-    'epochs': 12,   # 12 to catch best-converging runs via best_run()
+    'epochs': 50,   # 12 to catch best-converging runs via best_run()
     'eval': True,
     'log_batch_size': 9,
     'log_eval_batch_size': 17,
@@ -327,14 +327,16 @@ BASE_CONFIG = {
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
 )
+@click.option("--mesh", default=0)
 def hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
-    final_config.update(config)    
-    graph_tags = parse_graph_path(config['data_path'])
-    wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
-    wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
-    final_config['wandb_tags'] = wandb_tags
+    final_config.update(config)   
+    if final_config["mesh"] != 1:
+        graph_tags = parse_graph_path(config['data_path'])
+        wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
+        wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
+        final_config['wandb_tags'] = wandb_tags
     training(final_config)
 
 

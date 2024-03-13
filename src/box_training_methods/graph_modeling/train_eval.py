@@ -239,7 +239,10 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         selected_graph_name = random.choice(graphs)
         logger.info(f"Selected graph {selected_graph_name}")
     else:  # passing in a specific random seed
-        selected_graph_name = graph.name[:-len(".npz")]
+        if config["mesh"] == 1:
+            selected_graph_name = graph.name[:-len(".pt")]
+        else:
+            selected_graph_name = graph.name[:-len(".npz")]
         graph = graph.parent
     config["data_path"] = str(graph / selected_graph_name)
 
@@ -251,8 +254,13 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
 
     npz_file = Path(config["data_path"] + ".npz")
     tsv_file = Path(config["data_path"] + ".tsv")
+    pt_file = Path(config["data_path"] + ".pt")     # for saved MeSH edges
     avoid_edges = None
-    if npz_file.exists():
+    breakpoint()
+    if config["mesh"] == 1:
+        training_edges = torch.load(pt_file)
+        num_nodes = 29934
+    elif npz_file.exists():
         training_edges, num_nodes = edges_and_num_nodes_from_npz(npz_file)
     elif tsv_file.exists():
         stats = toml.load(config["data_path"] + ".toml")
@@ -298,7 +306,7 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
             negative_sampler = HierarchyAwareNegativeEdges(
                 edges=training_edges,
                 negative_ratio=config["negative_ratio"],
-                cache_dir=os.path.dirname(npz_file),
+                cache_dir=os.path.dirname(npz_file) if config["mesh"] != 1 else os.path.dirname(pt_file),
                 graph_name=selected_graph_name,
                 load_from_cache=True,
             ).to(device)

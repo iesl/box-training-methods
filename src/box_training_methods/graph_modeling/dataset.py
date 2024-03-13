@@ -581,33 +581,54 @@ class GraphDataset(Dataset):
 
 if __name__ == "__main__":
 
-    print("loading graph edges and num nodes")
-    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full_tc.npz")
-    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=True/10.npz")
-    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
-    edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/415728013.npz")
-    print("creating digraph")
+    # print("loading graph edges and num nodes")
+    # # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/realworld/wordnet_full/wordnet_full_tc.npz")
+    # # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=100-log_num_nodes=13-transitive_closure=True/10.npz")
+    # # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/nested_chinese_restaurant_process/alpha=500-log_num_nodes=13-transitive_closure=True/4.npz")
+    # edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/415728013.npz")
+    # print("creating digraph")
+    # G = nx.DiGraph()
+    # G.add_edges_from(edges)
+
+    # H0 = HierarchyAwareNegativeEdges(
+    #     edges=torch.tensor(list(G.edges)),
+    #     negative_ratio=4,
+    #     cache_dir=os.path.dirname("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/"),
+    #     graph_name="415728013",
+    #     load_from_cache=True,
+    # )
+
+    # print("start hierarchy-aware")
+    # H1 = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
+    # print("end hierarchy-aware")
+
+    # # R = RandomNegativeEdges(
+    # #     num_nodes=8192,
+    # #     negative_ratio=128,
+    # #     avoid_edges=None,
+    # #     device="cpu",
+    # #     permutation_option="none",
+    # # )
+
+    # edges = [("Root", "A")]#, ("Root", "B"), ("A", "A1"), ("A", "A2"), ("B", "B1"), ("B", "B2")]
+    # edges = [(0, 1)]#, (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)]
+
+    # G = nx.DiGraph()
+    # G.add_edges_from(edges)
+    # H0 = HierarchyAwareNegativeEdges(
+    #     edges=torch.tensor(list(G.edges)),
+    #     negative_ratio=4,
+    #     load_from_cache=False,
+    # )
+
+    edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh/MESH_2020.icml2024.npz")
     G = nx.DiGraph()
     G.add_edges_from(edges)
-
-    H0 = HierarchyAwareNegativeEdges(
+    H = HierarchyAwareNegativeEdges(
         edges=torch.tensor(list(G.edges)),
         negative_ratio=4,
-        cache_dir=os.path.dirname("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/graphs13/balanced_tree/branching=10-log_num_nodes=13-transitive_closure=True/"),
-        graph_name="415728013",
-        load_from_cache=True,
+        load_from_cache=False,
     )
-
-    print("start hierarchy-aware")
-    H1 = HierarchyAwareNegativeEdges(edges=torch.tensor(list(G.edges)))
-    print("end hierarchy-aware")
-
-    # R = RandomNegativeEdges(
-    #     num_nodes=8192,
-    #     negative_ratio=128,
-    #     avoid_edges=None,
-    #     device="cpu",
-    #     permutation_option="none",
-    # )
+    H.cache()
 
     breakpoint()
