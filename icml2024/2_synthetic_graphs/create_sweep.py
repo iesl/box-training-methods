@@ -14,11 +14,7 @@ def main(args):
         f"--lr_nw_json={args.lr_nw_json}",
     ],
     "method": "grid",
-    "metric": {
-    "goal": "maximize",
-    "name": "[Eval] F1"
-    },
-    "name": "synthetic_graphs",
+    "name": "synthetic_graphs.v2",
     "parameters": {
         "data_path": {
             "values": [

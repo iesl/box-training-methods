@@ -256,7 +256,6 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
     tsv_file = Path(config["data_path"] + ".tsv")
     pt_file = Path(config["data_path"] + ".pt")     # for saved MeSH edges
     avoid_edges = None
-    breakpoint()
     if config["mesh"] == 1:
         training_edges = torch.load(pt_file)
         num_nodes = 29934

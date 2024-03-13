@@ -32,7 +32,7 @@ def plot_error_regions(means, stds, colors, labels, markers, title, fpath):
     if not all(len(means[i]) == len(stds[i]) for i in range(num_sets)):
         raise ValueError("Means and standard deviations must have the same length.")
 
-    x_values = np.arange(len(means[0])) * 0.2
+    x_values = np.arange(len(means[0]))# * 0.2
 
     plt.figure(figsize=(10, 6))
 
@@ -123,7 +123,7 @@ def main():
                 print(tags)
                 print(positive_with_random, positive_with_hierarchical)
 
-                fpath = f"./plots.v2/{graph_type}.k={negative_ratio}.+random={positive_with_random}.+hierarchical={positive_with_hierarchical}.png"
+                fpath = f"./plots.v2/f1/{graph_type}.k={negative_ratio}.+random={positive_with_random}.+hierarchical={positive_with_hierarchical}.png"
 
                 if graph_type == "price": 
                     title = "Price's Network"

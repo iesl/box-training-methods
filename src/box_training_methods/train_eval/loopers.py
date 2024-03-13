@@ -549,7 +549,6 @@ class GraphModelingEvalLooper:
         num_nodes = self.dl.sampler.data_source.num_nodes
         ground_truth = np.zeros((num_nodes, num_nodes))
 
-        breakpoint()
         if self.config["mesh"] != 1:
             pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
         else:

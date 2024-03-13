@@ -31,7 +31,7 @@ def graph_hparams_to_str(graph_type, graph_hparams):
 
 def main():
 
-    header = ["Graph Type", "$\Theta$", "$\EE[|V|]$", "$\EE[|E|]$", "$\EE[|E^{\mathrm{tc}}|]$", "$\EE[|E^{\mathrm{tr}}|]$", "$\EE[|\overline E|]$", "$\EE[|E_{H^*}|]$", "$\EE[|E| / |\overline E|]$", "$\EE[|E^{\mathrm{tr}}| / |E^{\mathrm{tc}}|]$", "$\EE[|E_{H^*}| / |\overline E|]$", "$\EE[|\mathrm{reduced}| / |\mathrm{full}|]$"]
+    header = ["Graph Type", "$\Theta$", "$\EE[|V|]$", "$\EE[|E|]$", "$\EE[|E^{\mathrm{tc}}|]$", "$\EE[|E^{\mathrm{tr}}|]$", "$\EE[|\overline E|]$", "$\EE[|E_{H^*}|]$", "$\EE[|E| / |\overline E|]$", "$\EE[1 - |E^{\mathrm{tr}}| / |E^{\mathrm{tc}}|]$", "$\EE[1 - |E_{H^*}| / |\overline E|]$"]
 
     graph_info = defaultdict(list)
     for graph_dir in GRAPH_DIR_PATHS:
@@ -56,7 +56,7 @@ def main():
     for graph_type in ["balanced_tree", "nested_chinese_restaurant_process", "price", "wordnet"]:
         hparams_stats = sorted(graph_info[graph_type], key=lambda x: x[0])
         for (hparams_str, stats) in hparams_stats:
-            row = [hparams_str, stats["[nodes]"], stats["[+edges]"], stats["[+edges_tc]"], stats["[+edges_tr]"], stats["[-edges_r]"], stats["[-edges_h]"], str(round(100 * (stats["[+edges]"] / stats["[-edges_r]"]), 4)) + "\%", str(round(100 * stats["[+edges_tr] / [+edges_tc]"], 2)) + "\%", str(round(100 * stats["[-edges_h] / [-edges_r]"], 2)) + "\%", str(round(100 * stats["([+edges_tr] + [-edges_h]) / ([+edges_tc] + [-edges_r])"], 2)) + "\%"]
+            row = [hparams_str, stats["[nodes]"], stats["[+edges]"], stats["[+edges_tc]"], stats["[+edges_tr]"], stats["[-edges_r]"], stats["[-edges_h]"], str(round(100 * (stats["[+edges]"] / stats["[-edges_r]"]), 4)) + "\%", str(round(100 * (1 - stats["[+edges_tr] / [+edges_tc]"]), 2)) + "\%", str(round(100 * (1 - stats["[-edges_h] / [-edges_r]"]), 2)) + "\%"]
             row = [str(x) for x in row]
             table_dict[graph_type].append(row)
 
@@ -66,15 +66,15 @@ def main():
 
     balanced_tree_str = '\multirow{4}{*}{Balanced Tree} '
     for row in table_dict['balanced_tree']:
-        balanced_tree_str += ('& ' + ' & '.join(row) + '\\\\')
+        balanced_tree_str += ('& ' + ' & '.join(row) + '\\\\\n')
     balanced_tree_str += "\\hline"
     ncrp_str = '\multirow{4}{*}{nCRP} '
     for row in table_dict['nested_chinese_restaurant_process']:
-        ncrp_str += ('& ' + ' & '.join(row) + '\\\\')
+        ncrp_str += ('& ' + ' & '.join(row) + '\\\\\n')
     ncrp_str += "\\hline"
     price_str = '\multirow{4}{*}{Price} '
     for row in table_dict['price']:
-        price_str += ('& ' + ' & '.join(row) + '\\\\')
+        price_str += ('& ' + ' & '.join(row) + '\\\\\n')
     price_str += "\\hline"
     wordnet_str = '\multirow{1}{*}{WordNet} '
     for row in table_dict['wordnet']:
