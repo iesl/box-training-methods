@@ -549,10 +549,7 @@ class GraphModelingEvalLooper:
         num_nodes = self.dl.sampler.data_source.num_nodes
         ground_truth = np.zeros((num_nodes, num_nodes))
 
-        if self.config["mesh"] != 1:
-            pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
-        else:
-            pos_index = torch.load(self.config["data_path"])
+        pos_index, _ = edges_and_num_nodes_from_npz(self.dl.sampler.data_source.graph_npz_file)
         pos_index = torch.tensor(list(nx.transitive_closure(nx.DiGraph(pos_index.tolist())).edges))
         # # release RAM
         # del self.dl.dataset

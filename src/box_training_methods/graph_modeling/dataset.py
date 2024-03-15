@@ -430,7 +430,7 @@ class HierarchyAwareNegativeEdges:
 
         # create graph
         self.G = nx.DiGraph()
-        self.G.add_edges_from((self.edges).tolist())
+        self.G.add_edges_from(self.edges.tolist())
         nodes = sorted(self.G.nodes)
 
         # load/create negative edges

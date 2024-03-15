@@ -327,12 +327,11 @@ BASE_CONFIG = {
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
 )
-@click.option("--mesh", default=0)
 def hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)
     final_config.update(config)   
-    if final_config["mesh"] != 1:
+    if "MESH_2020" not in config["data_path"].upper():
         graph_tags = parse_graph_path(config['data_path'])
         wandb_tags = ["=".join([k, str(v)]) for k, v in config.items() if k != 'data_path']
         wandb_tags.extend(["=".join([k, str(v)]) for k, v in graph_tags.items()])
