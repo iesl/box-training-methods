@@ -275,7 +275,7 @@ BASE_CONFIG = {
     'box_volume_temp': 1.0,
     'cuda': True,
     'dim': 64,
-    'epochs': 50,   # 12 to catch best-converging runs via best_run()
+    'epochs': 12,   # 12 to catch best-converging runs via best_run()
     'eval': True,
     'log_batch_size': 9,
     'log_eval_batch_size': 17,
