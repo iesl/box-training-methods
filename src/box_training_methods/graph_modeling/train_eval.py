@@ -282,7 +282,7 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
             avoid_edges = torch.cat((training_edges, training_edges[..., [1, 0]], diag))
             # TODO implement transitive closure of training_edges to be avoid_edges for undirected as well as directed
         else:
-            training_edges_tc = torch.tensor(list(nx.transitive_closure(nx.DiGraph(training_edges)).edges), device=device)
+            training_edges_tc = torch.tensor(list(nx.transitive_closure(nx.DiGraph(training_edges.tolist())).edges), device=device)
             avoid_edges = torch.cat((training_edges_tc, diag))
 
     if not eval_only:
