@@ -11,10 +11,11 @@ def main1(graph_type):
     columns = ["graph_unique_id", "model_type", "full_positive_edge_set", "full_negative_edge_set", "num_negative_samples", "step", "total_examples", "F1", "AUC", "threshold"]
     rows = []
 
-    if graph_type == "price":
-        sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
-    else:
-        sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
+    # if graph_type == "price":
+    #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
+    # else:
+    #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
+    sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/4von71px")
 
     for model_type in ["tbox", "vector_sim"]:
         for positive_edge_set in ["tr", "tc"]:
@@ -39,7 +40,7 @@ def main1(graph_type):
                                     rows.append(row)
 
     df = pd.DataFrame(rows, columns=columns)
-    df.to_csv(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/5_stats/runs_stats.{graph_type}.csv")
+    df.to_csv(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/5_stats/runs_stats.DEBUGGED/runs_stats.{graph_type}.csv")
 
 
 def main2():

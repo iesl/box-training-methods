@@ -11,10 +11,10 @@ sweep_config_template = {
      "${program}",
      "hyperparameter_tuning",
      "${args}",
-     "--data_path=/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh/MESH_2020.icml2024.FINAL.pt",
+     "--data_path=/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh/MESH_2020.icml2024.pt",
      "--mesh=1",
     ],
- "method": "random",
+ "method": "bayes",
  "metric": {
   "goal": "maximize",
   "name": "[Eval] F1"
@@ -28,7 +28,7 @@ sweep_config_template = {
     },
     "negative_weight": {
         "distribution": "uniform",
-        "max": 1.0,
+        "max": 1,
         "min": 0
     },
  },
@@ -40,16 +40,16 @@ def main(args):
 
     # create 2 x 2 x 2 x 2 = 16 sweeps total
     sweep_ids = []
-    # for model_type in ["vector_sim", "tbox"]:   # 2
-    #     for negative_sampler in ["random", "hierarchical"]: # 2
-    #         for negative_ratio in [4, 128]: # 2
-    #             for sample_positive_edges_from_tc_or_tr in ["tr", "tc"]:    # 2
-    for model_type in ["vector_sim"]:
-        for negative_sampler in ["random"]:
-            for negative_ratio in [128]:
-                for sample_positive_edges_from_tc_or_tr in ["tc"]:
+    for model_type in ["vector_sim", "tbox"]:   # 2
+        for negative_sampler in ["hierarchical"]: # 1
+            for negative_ratio in [4, 128]: # 2
+                for sample_positive_edges_from_tc_or_tr in ["tr", "tc"]:    # 2
+                    # for model_type in ["vector_sim"]:
+                    #     for negative_sampler in ["random"]:
+                    #         for negative_ratio in [128]:
+                    #             for sample_positive_edges_from_tc_or_tr in ["tc"]:
                     sweep_config = copy.deepcopy(sweep_config_template)
-                    sweep_config["name"] = f"MeSH_2020.debug.v3 {model_type} {negative_sampler} negative_ratio={negative_ratio} sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}"
+                    sweep_config["name"] = f"MeSH_2020.v7 {model_type} {negative_sampler} negative_ratio={negative_ratio} sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}"
                     sweep_config["command"].append(f"--model_type={model_type}")
                     sweep_config["command"].append(f"--negative_sampler={negative_sampler}")
                     sweep_config["command"].append(f"--negative_ratio={negative_ratio}")

@@ -74,7 +74,7 @@ def main(args):
                 for negative_ratio in [4, 128]: # 2
                     for sample_positive_edges_from_tc_or_tr in ["tr", "tc"]:    # 2
                         sweep_config = copy.deepcopy(sweep_config_template)
-                        sweep_config["name"] = f"V2 {s} {model_type} {negative_sampler} negative_ratio={negative_ratio} sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}"
+                        sweep_config["name"] = f"V3 {s} {model_type} {negative_sampler} negative_ratio={negative_ratio} sample_positive_edges_from_{sample_positive_edges_from_tc_or_tr}"
                         sweep_config["command"].append(f"--data_path={graph_dir_path}")
                         sweep_config["command"].append(f"--model_type={model_type}")
                         sweep_config["command"].append(f"--negative_sampler={negative_sampler}")

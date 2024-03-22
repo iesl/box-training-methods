@@ -39,7 +39,7 @@ def main(args):
 if __name__ == "__main__":
 
     # ----------—----------—----------—----------—
-    # python3 query_wandb_for_best_learning_rate_and_negative_weight_per_graph_type.py --input_sweep_ids_file ./sweep_ids.txt --output_json_file ./configuration_to_best_learning_rate_and_negative_weight.json
+    # python3 query_wandb_for_best_learning_rate_and_negative_weight_per_configuration.py --input_sweep_ids_file ./sweep_ids.txt --output_json_file ./configuration_to_best_learning_rate_and_negative_weight.json
     # ----------—----------—----------—----------—
 
     parser = argparse.ArgumentParser()

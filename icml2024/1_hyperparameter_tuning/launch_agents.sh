@@ -14,4 +14,4 @@ PARTITION=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "./sweep_partition_assignments.txt"
 echo ${PARTITION}
 scontrol update PartitionName=${PARTITION}
 
-wandb agent -e hierarchical-negative-sampling -p icml2024 --count 25 ${SWEEP_ID}
+wandb agent -e hierarchical-negative-sampling -p icml2024 --count 10 ${SWEEP_ID}

@@ -144,11 +144,12 @@ def plot_boxes_only():
     api = wandb.Api()
     for i, graph_type in enumerate(["balanced_tree", "nested_chinese_restaurant_process", "price"]):
         
-        if i == 2:  # price sweep
-            sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
-        else:
-            sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
-        
+        # if i == 2:  # price sweep
+        #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
+        # else:
+        #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
+        sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/4von71px")        
+
         data_path_to_runs = hash_runs_in_sweep_by_data_path(sweep)
 
         for data_path in DATA_PATHS[graph_type]:
@@ -219,7 +220,7 @@ def plot_boxes_only():
             plt.xlabel("Total Examples")
             plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
             plt.ylabel("F1")
-            plt.savefig(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/4_plotting/plots.v3/boxes_only_plots/{graph_type}-{hparams_fname}.{graph_seed}.k=4.box_only.png")
+            plt.savefig(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/4_plotting/plots.v3.DEBUGGED/boxes_only_plots/{graph_type}-{hparams_fname}.{graph_seed}.k=4.box_only.png")
             plt.clf()
 
 
@@ -231,11 +232,12 @@ def plot_boxes_vs_vectors():
     api = wandb.Api()
     for i, graph_type in enumerate(["balanced_tree", "nested_chinese_restaurant_process", "price"]):
         
-        if i == 2:  # price sweep
-            sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
-        else:
-            sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
-        
+        # if i == 2:  # price sweep
+        #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/z6t3y6oo")
+        # else:
+        #     sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/mpckfmmj")
+        sweep = api.sweep(f"hierarchical-negative-sampling/icml2024/4von71px")
+
         data_path_to_runs = hash_runs_in_sweep_by_data_path(sweep)
 
         for data_path in DATA_PATHS[graph_type]:
@@ -337,7 +339,7 @@ def plot_boxes_vs_vectors():
             plt.xlabel("Total Examples")
             plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
             plt.ylabel("F1")
-            plt.savefig(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/4_plotting/plots.v3/boxes_vs_vectors_plots/{graph_type}-{hparams_fname}.{graph_seed}.k=128.box_vs_vec.png")
+            plt.savefig(f"/work/pi_mccallum_umass_edu/brozonoyer_umass_edu/box-training-methods/icml2024/4_plotting/plots.v3.DEBUGGED/boxes_vs_vectors_plots/{graph_type}-{hparams_fname}.{graph_seed}.k=128.box_vs_vec.png")
             plt.clf()
 
 

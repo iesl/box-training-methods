@@ -14,7 +14,7 @@ def main(args):
         f"--lr_nw_json={args.lr_nw_json}",
     ],
     "method": "grid",
-    "name": "synthetic_graphs.v2",
+    "name": "V2 synthetic_graphs",
     "parameters": {
         "data_path": {
             "values": [
