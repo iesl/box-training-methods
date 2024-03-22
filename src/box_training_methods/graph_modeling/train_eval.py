@@ -239,7 +239,10 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
         selected_graph_name = random.choice(graphs)
         logger.info(f"Selected graph {selected_graph_name}")
     else:  # passing in a specific random seed
-        selected_graph_name = graph.name[:-len(".npz")]
+        if config["mesh"] == 1:
+            selected_graph_name = graph.name[:-len(".pt")]
+        else:
+            selected_graph_name = graph.name[:-len(".npz")]
         graph = graph.parent
     config["data_path"] = str(graph / selected_graph_name)
 
@@ -251,8 +254,12 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
 
     npz_file = Path(config["data_path"] + ".npz")
     tsv_file = Path(config["data_path"] + ".tsv")
+    pt_file = Path(config["data_path"] + ".pt")
     avoid_edges = None
-    if npz_file.exists():
+    if config["mesh"] == 1:
+        training_edges = torch.load("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh/MESH_2020.icml2024.pt")
+        num_nodes = 29934
+    elif npz_file.exists():
         training_edges, num_nodes = edges_and_num_nodes_from_npz(npz_file)
     elif tsv_file.exists():
         stats = toml.load(config["data_path"] + ".toml")
@@ -320,3 +327,4 @@ def setup_training_data(device: Union[str, torch.device], eval_only: bool = Fals
     logger.debug(f"Total time spent loading data: {time()-start:0.1f} seconds")
 
     return dataset
+

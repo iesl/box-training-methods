@@ -327,6 +327,7 @@ BASE_CONFIG = {
     required=True,
     help="sample positive edges from transitive closure or transitive reduction"
 )
+@click.option("--mesh", default=0, type=int)
 def hyperparameter_tuning(**config):
     from .train import training
     final_config = copy.deepcopy(BASE_CONFIG)

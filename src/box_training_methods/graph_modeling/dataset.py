@@ -623,12 +623,14 @@ if __name__ == "__main__":
 
     edges, num_nodes = edges_and_num_nodes_from_npz("/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh/MESH_2020.icml2024.npz")
     G = nx.DiGraph()
-    G.add_edges_from(edges)
+    G.add_edges_from(edges.tolist())
     H = HierarchyAwareNegativeEdges(
         edges=torch.tensor(list(G.edges)),
         negative_ratio=4,
-        load_from_cache=False,
+        load_from_cache=True,
+        cache_dir="/project/pi_mccallum_umass_edu/brozonoyer_umass_edu/graph-data/mesh",
+        graph_name="MESH_2020.icml2024",
     )
-    H.cache()
+    # H.cache()
 
     breakpoint()
